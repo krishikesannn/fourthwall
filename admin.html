@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Studio Desk — The Fourth Wall</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/admin.css">
+</head>
+<body>
+  <main class="auth-shell" id="loginView">
+    <section class="login-card">
+      <a class="wordmark" href="index.html">◫ THE FOURTH WALL</a>
+      <span class="eyebrow">PRIVATE STUDIO DESK</span>
+      <h1>Keep the good work moving.</h1>
+      <p>Manage new inquiries and the projects your studio is building.</p>
+      <form id="loginForm" class="stack-form">
+        <label>Email <input type="email" name="email" autocomplete="email" required placeholder="you@thefourthwall.com"></label>
+        <label>Password <input type="password" name="password" autocomplete="current-password" required placeholder="••••••••"></label>
+        <p class="form-error" id="loginError" aria-live="polite"></p>
+        <button class="button" type="submit">ENTER STUDIO DESK →</button>
+      </form>
+      <p class="hint">Local setup: <code>admin@thefourthwall.local</code> / <code>change-me</code>. Set <code>ADMIN_EMAIL</code> and <code>ADMIN_PASSWORD</code> before deployment.</p>
+    </section>
+  </main>
+
+  <div class="app-shell hidden" id="appView">
+    <aside class="sidebar">
+      <a class="wordmark" href="index.html">◫ THE FOURTH WALL</a>
+      <div class="studio-label">STUDIO DESK</div>
+      <nav class="side-nav" aria-label="Studio desk">
+        <button class="nav-item active" data-view="overview">Overview</button>
+        <button class="nav-item" data-view="inquiries">Inquiries <span id="leadBadge"></span></button>
+        <button class="nav-item" data-view="projects">Projects</button>
+      </nav>
+      <div class="sidebar-bottom"><a href="index.html">↗ View website</a><button id="logoutButton">Sign out</button></div>
+    </aside>
+    <main class="workspace">
+      <header class="topbar"><div><span class="eyebrow" id="todayLabel">STUDIO OVERVIEW</span><h1 id="pageTitle">Good morning.</h1></div><button class="button button--small" data-open-project>+ NEW PROJECT</button></header>
+      <section id="overview" class="view active">
+        <div class="metrics"><article><span>NEW INQUIRIES</span><strong id="metricNew">0</strong><small>Waiting for a reply</small></article><article><span>ACTIVE PROJECTS</span><strong id="metricProjects">0</strong><small>Currently in the studio</small></article><article><span>TOTAL LEADS</span><strong id="metricLeads">0</strong><small>Captured from your website</small></article></div>
+        <div class="content-grid"><section class="panel"><div class="panel-head"><div><span class="eyebrow">INBOX</span><h2>Fresh conversations</h2></div><button class="text-button" data-switch-view="inquiries">See all</button></div><div id="recentInquiries" class="inquiry-list"></div></section><section class="panel"><div class="panel-head"><div><span class="eyebrow">DELIVERY</span><h2>Project pulse</h2></div><button class="text-button" data-switch-view="projects">See all</button></div><div id="projectPulse" class="project-list"></div></section></div>
+      </section>
+      <section id="inquiries" class="view"><div class="section-heading"><div><span class="eyebrow">YOUR INBOX</span><h2>Client inquiries</h2></div><p>Every project conversation from the public site lands here.</p></div><div class="panel table-panel"><div id="allInquiries" class="inquiry-list"></div></div></section>
+      <section id="projects" class="view"><div class="section-heading"><div><span class="eyebrow">DELIVERY BOARD</span><h2>Studio projects</h2></div><button class="button button--small" data-open-project>+ NEW PROJECT</button></div><div id="allProjects" class="projects-grid"></div></section>
+    </main>
+  </div>
+  <dialog id="projectDialog"><form id="projectForm" class="project-form" method="dialog"><button class="dialog-close" value="cancel" aria-label="Close">×</button><span class="eyebrow">NEW PROJECT</span><h2>Start a fresh chapter.</h2><label>Project / client name<input name="name" required placeholder="e.g. Saffron House"></label><label>What are you delivering?<input name="service" required placeholder="e.g. Brand identity"></label><div class="two-col"><label>Status<select name="status"><option>Planning</option><option>Active</option><option>Complete</option></select></label><label>Due date<input name="dueDate" type="date"></label></div><label>Client access email<input name="clientEmail" type="email" placeholder="client@brand.com"></label><label>Client project code<input name="clientCode" placeholder="e.g. SAFFRON2026"></label><label>Progress <output id="progressValue">0%</output><input id="progressInput" name="progress" type="range" min="0" max="100" value="0"></label><p class="form-error" id="projectError" aria-live="polite"></p><button class="button" type="submit">CREATE PROJECT →</button></form></dialog>
+  <script src="scripts/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+-- Development-only seed. Create auth users through Supabase Auth, then attach profiles here.
+-- Do not place real client names, emails, access codes, or payment data in seed files.

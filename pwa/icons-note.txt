@@ -1,0 +1,1 @@
+The included icon.svg is a maskable evergreen icon using the ◫ wordmark. For iOS, keep icon.svg or export it to a 180×180 PNG named apple-touch-icon.png and update index.html.

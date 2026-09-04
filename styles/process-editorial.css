@@ -1,0 +1,237 @@
+/* ==========================================================================
+   THE FOURTH WALL — PROCESS PAGE (EDITORIAL COLLAGE STYLING)
+   ========================================================================== */
+
+:root {
+  --process-bg: #efe2cf;
+  --process-teal: #003f3d;
+  --process-gold: #c2a570;
+  --process-text: #2c3834;
+}
+
+/* ---- Page Wrapper ---- */
+.process-editorial-page {
+  background: #efe2cf url('../assets/images/beige_paper_texture.jpg') repeat;
+  background-size: 1024px auto;
+  min-height: 100vh;
+  padding: 1.2rem 0 5.5rem 0;
+  overflow: hidden;
+}
+
+.process-container {
+  width: 100%;
+  max-width: min(96vw, 1122px);
+  margin: 0 auto;
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* =========================================
+   1. EDITORIAL HEADER (CSS text – no PNG)
+   ========================================= */
+
+.process-header {
+  padding: 1.8rem 0 0.8rem 0;
+  position: relative;
+}
+
+.process-header__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 0.8rem;
+}
+
+.process-header__left {
+  display: flex;
+  flex-direction: column;
+}
+
+.process-header__annotation {
+  font-family: 'Caveat', cursive;
+  font-size: 1.45rem;
+  color: var(--process-gold);
+  margin-bottom: 0.15rem;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.process-star-icon {
+  width: 14px;
+  height: 14px;
+  fill: var(--process-gold);
+  display: inline-block;
+  vertical-align: middle;
+  transform: translateY(-1px);
+}
+
+.process-header__title {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(2.4rem, 4.5vw, 3.6rem);
+  font-weight: 700;
+  color: var(--process-teal);
+  letter-spacing: 0.04em;
+  margin: 0;
+  line-height: 1.05;
+}
+
+.process-header__subtitle {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: #11201d;
+  line-height: 1.35;
+  text-align: right;
+  max-width: 300px;
+  margin: 0 0 0.2rem 0;
+}
+
+.process-header__divider {
+  width: 100%;
+  height: 1.5px;
+  background-color: var(--process-teal);
+  margin-top: 0.6rem;
+}
+
+/* =========================================
+   2. INTRO STATEMENT QUOTE (CSS text – no PNG)
+   ========================================= */
+
+.process-statement {
+  text-align: center;
+  padding: 2.2rem 1rem 0.6rem 1rem;
+}
+
+.process-statement__tag {
+  font-family: 'Caveat', cursive;
+  font-size: 1.6rem;
+  color: var(--process-gold);
+  margin-bottom: 0.4rem;
+  display: inline-block;
+}
+
+.process-statement__quote {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.4rem, 4vw, 2.65rem);
+  font-weight: 600;
+  color: var(--process-teal);
+  line-height: 1.25;
+  margin: 0;
+  word-wrap: break-word;
+}
+
+/* =========================================
+   3. CARDS + TIMELINE ARTBOARD (PNG assets)
+   ========================================= */
+
+.process-cards-artboard {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 819 / 580;
+  overflow: visible;
+}
+
+/* ---- Shared base for all PNG layers ---- */
+.process-asset {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  display: block;
+  height: auto;
+}
+
+/* ---- Golden Wavy Timeline ---- */
+.timeline-asset {
+  left: 39.5%;
+  top: 2.8%;
+  width: 24.8%;
+  z-index: 1;
+}
+
+/* ---- Card Assets (Reduced Size: 38.5%) ---- */
+img.card-asset {
+  width: 38.5%;
+  z-index: 2;
+}
+
+/* Left-side cards (01, 03, 05, 07) */
+.card--01 { left: 7.3%;  top: -2%;   }
+.card--03 { left: 7.3%;  top: 22.5%; }
+.card--05 { left: 7.3%;  top: 47%;   }
+
+/* Right-side cards (02, 04, 06) */
+.card--02 { left: 56.5%; top: 10%;   }
+.card--04 { left: 56.5%; top: 34.5%; }
+.card--06 { left: 56.5%; top: 59%;   }
+
+/* Card 07 (GROW) */
+img.card-asset.card--07 { left: 0%; top: 69.5%; width: 44%; }
+
+/* =========================================
+   MOBILE  ≤ 860 px
+   ========================================= */
+
+@media (max-width: 860px) {
+  .process-editorial-page {
+    padding-bottom: 2rem;
+  }
+
+  .process-header__top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.8rem;
+  }
+  .process-header__subtitle {
+    text-align: left;
+    max-width: 100%;
+  }
+
+  .process-statement {
+    padding: 2rem 0.6rem 0.5rem 0.6rem;
+  }
+
+  .process-cards-artboard {
+    aspect-ratio: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 0.5rem 0 0 0;
+  }
+
+  img.timeline-asset {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: auto !important;
+    height: 100%;
+    opacity: 0.15;
+    z-index: 0;
+  }
+
+  img.card-asset {
+    position: relative !important;
+    width: 82% !important;
+    left: auto !important;
+    top: auto !important;
+    z-index: 1;
+    margin-top: -14%;
+  }
+
+  img.card-asset.card--01 {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  img.card-asset {
+    width: 90% !important;
+    margin-top: -16%;
+  }
+  img.card-asset.card--01 {
+    margin-top: 0;
+  }
+}

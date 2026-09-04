@@ -1,0 +1,23 @@
+{
+  "inquiries": [],
+  "projects": [
+    {
+      "id": "f18913cb-87fa-483f-8082-be9c16d8fe60",
+      "name": "HarshaLucknowi",
+      "service": "Brand identity & social media",
+      "status": "Active",
+      "dueDate": "2026-09-30",
+      "progress": 68,
+      "updatedAt": "2026-09-02T08:47:44.301Z"
+    },
+    {
+      "id": "baadf9b2-b4b5-4cb6-a099-4de07a8c3ecd",
+      "name": "The Fourth Wall",
+      "service": "Website development",
+      "status": "Active",
+      "dueDate": "2026-09-15",
+      "progress": 84,
+      "updatedAt": "2026-09-02T08:47:44.301Z"
+    }
+  ]
+}

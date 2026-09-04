@@ -1,0 +1,120 @@
+/* === Design Tokens === */
+:root {
+  /* Canvas Backgrounds (Exact Uniform Parchment Beige #E5D4C2) */
+  --bg-primary: #E5D4C2;
+  --bg-cream: #E5D4C2;
+  --bg-warm: #E5D4C2;
+  --bg-card: #EEE3D6;
+  --bg-parchment: #E5D4C2;
+  --bg-teal: #0E3832;
+  --bg-dark-teal: #0A2B26;
+
+  /* Primary Deep Evergreen & Dark Charcoal Text */
+  --color-primary: #0E3832;
+  --color-secondary: #0A2B26;
+  --color-text: #1E2827;
+  --color-text-light: #4A5654;
+  --color-text-muted: #758280;
+  --color-white: #FAF7F2; /* Soft Parchment Off-White */
+
+  /* Muted Antique Gold & Subdued Borders */
+  --color-accent: #B89246;
+  --color-accent-light: #CFA958;
+  --color-border: rgba(14, 56, 50, 0.12);
+  --color-border-dark: rgba(14, 56, 50, 0.18);
+
+  /* Typography */
+  --font-serif: 'Playfair Display', 'Georgia', serif;
+  --font-sans: 'Inter', 'Helvetica Neue', sans-serif;
+  --font-hand: 'Caveat', cursive;
+
+  /* Font Sizes — Refined & Controlled Editorial Hierarchy */
+  --fs-display: clamp(2.2rem, 4.8vw, 4.2rem);
+  --fs-h1: clamp(1.7rem, 3.2vw, 2.8rem);
+  --fs-h2: clamp(1.4rem, 2.4vw, 2.1rem);
+  --fs-h3: clamp(1.15rem, 1.6vw, 1.5rem);
+  --fs-h4: clamp(0.95rem, 1.2vw, 1.25rem);
+  --fs-body: clamp(0.92rem, 1.05vw, 1.02rem);
+  --fs-body-lg: clamp(1.02rem, 1.2vw, 1.12rem);
+  --fs-small: clamp(0.78rem, 0.9vw, 0.82rem);
+  --fs-caption: clamp(0.68rem, 0.75vw, 0.72rem);
+  --fs-hand: clamp(1.05rem, 1.4vw, 1.3rem);
+
+  /* Font Weights */
+  --fw-light: 300;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --fw-extrabold: 800;
+
+  /* Opacity tokens */
+  --opacity-subtitle: 0.85;
+  --opacity-muted: 0.7;
+
+  /* Spacing */
+  --space-xs: 0.5rem;
+  --space-sm: 0.8rem;
+  --space-md: 1.2rem;
+  --space-lg: 1.8rem;
+  --space-xl: 2.8rem;
+  --space-2xl: 3.8rem;
+  --space-3xl: 5rem;
+  --space-4xl: 7rem;
+
+  /* Layout */
+  --max-width: 1360px;
+  --max-width-narrow: 960px;
+  --max-width-text: 640px;
+  --gutter: clamp(1.25rem, 3.5vw, 3.5rem);
+  --section-padding: clamp(2.5rem, 5vw, 4.5rem);
+  --header-padding: clamp(2rem, 3.5vw, 3.5rem);
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-round: 50%;
+  --radius-pill: 100px;
+  --radius-arch: 50% 50% 0 0;
+
+  /* Uniform Parchment Backgrounds */
+  --bg-paper-texture: url('../assets/images/beige_paper_texture.jpg');
+  --bg-gradient-hero: #E5D4C2 url('../assets/images/beige_paper_texture.jpg') repeat;
+  --bg-gradient-cream: #E5D4C2 url('../assets/images/beige_paper_texture.jpg') repeat;
+  --bg-gradient-sand: #E5D4C2 url('../assets/images/beige_paper_texture.jpg') repeat;
+  --bg-gradient-card: linear-gradient(145deg, #EEE3D6 0%, #E5D4C2 100%);
+  --bg-gradient-dark: linear-gradient(145deg, #0E3832 0%, #071F1C 100%);
+  --bg-radial-mesh: transparent;
+
+  /* Calm Ambient Shadows */
+  --shadow-sm: 0 2px 8px rgba(30, 40, 39, 0.04);
+  --shadow-md: 0 4px 16px rgba(30, 40, 39, 0.06);
+  --shadow-lg: 0 8px 32px rgba(30, 40, 39, 0.08);
+  --shadow-subtle: 0 4px 20px -2px rgba(14, 56, 50, 0.04), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+  --shadow-card: 0 12px 32px -4px rgba(14, 56, 50, 0.06), 0 4px 12px -2px rgba(30, 40, 39, 0.03);
+  --shadow-hover: 0 20px 40px -6px rgba(14, 56, 50, 0.1), 0 8px 18px -4px rgba(30, 40, 39, 0.04);
+  --shadow-image: 0 18px 45px -10px rgba(14, 56, 50, 0.14), 0 6px 16px -4px rgba(0, 0, 0, 0.05);
+  --shadow-editorial: 0 16px 44px -8px rgba(14, 56, 50, 0.1), 0 4px 14px -2px rgba(0, 0, 0, 0.04);
+
+  /* Glassmorphism Soft Parchment Off-White */
+  --glass-bg: rgba(227, 211, 196, 0.94);
+  --glass-border: rgba(14, 56, 50, 0.1);
+
+  /* Transitions */
+  --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-in-out: cubic-bezier(0.42, 0, 0.58, 1);
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 200ms;
+  --duration-normal: 400ms;
+  --duration-slow: 600ms;
+  --duration-slower: 800ms;
+
+  /* Z-index layers */
+  --z-base: 1;
+  --z-above: 10;
+  --z-nav: 100;
+  --z-overlay: 500;
+  --z-modal: 1000;
+}

@@ -1,0 +1,275 @@
+/* ==========================================================================
+   THE FOURTH WALL — BELIEFS EDITORIAL COLLAGE STYLING
+   ========================================================================== */
+
+:root {
+  --beliefs-bg: #efe2cf;
+  --beliefs-teal: #003f3d;
+  --beliefs-gold: #c2a570;
+  --beliefs-text: #2c3834;
+}
+
+/* Base Section Wrapper */
+.beliefs-editorial-section {
+  background: #efe2cf url('../assets/images/beige_paper_texture.jpg') repeat;
+  background-size: 1024px auto;
+  padding: 3.5rem 0 5rem 0;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.beliefs-editorial-container {
+  width: 100%;
+  max-width: min(96vw, 1122px);
+  margin: 0 auto;
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* =========================================
+   1. EDITORIAL HEADER
+   ========================================= */
+
+.beliefs-header {
+  margin-bottom: 0.8rem;
+  position: relative;
+}
+
+.beliefs-header__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 0.8rem;
+}
+
+.beliefs-header__title {
+  font-family: var(--font-sans, 'Inter', 'Helvetica Neue', sans-serif);
+  font-size: clamp(1.4rem, 2.8vw, 2.2rem);
+  font-weight: 800;
+  color: var(--beliefs-teal);
+  letter-spacing: 0.03em;
+  margin: 0;
+  line-height: 0.98;
+}
+
+.beliefs-header__annotation {
+  font-family: 'Caveat', cursive;
+  font-size: 1.6rem;
+  color: var(--beliefs-gold);
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.beliefs-star-icon {
+  width: 14px;
+  height: 14px;
+  fill: var(--beliefs-gold);
+  display: inline-block;
+  vertical-align: middle;
+  transform: translateY(-1px);
+}
+
+.beliefs-header__divider {
+  width: 100%;
+  height: 1.5px;
+  background-color: var(--beliefs-teal);
+  margin-top: 0.6rem;
+}
+
+/* =========================================
+   2. COLLAGE ARTBOARD (ABSOLUTE POSITIONING)
+   ========================================= */
+
+.beliefs-artboard {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1448 / 1180;
+  container-type: inline-size;
+  overflow: visible;
+}
+
+.belief-asset {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  display: block;
+  height: auto;
+}
+
+/* Five Banners (Stacked with EXACT 0.5cm visible gap between paper cards) */
+.belief-banner-item {
+  position: absolute;
+  left: 0.5%;
+  width: 99.0%;
+}
+
+.belief-banner-bg {
+  width: 100%;
+  height: auto;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+}
+
+.belief-banner-content {
+  position: absolute;
+  top: 48.5%;
+  transform: translateY(-50%);
+  left: 6.8%;
+  right: 14%;
+  display: flex;
+  align-items: center;
+  z-index: 5;
+}
+
+.banner--01 .belief-banner-content {
+  top: 45.5%;
+}
+
+.belief-banner-num {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.75rem, 3.4vw, 2.75rem);
+  font-weight: 400;
+  color: #c2a570;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  flex-shrink: 0;
+  min-width: clamp(2.3rem, 4.0vw, 3.4rem);
+}
+
+.belief-banner-divider {
+  width: 1.5px;
+  height: 54%;
+  background-color: #c2a570;
+  opacity: 0.65;
+  margin: 0 clamp(0.8rem, 1.8vw, 1.6rem);
+  flex-shrink: 0;
+}
+
+.belief-banner-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.belief-banner-title {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.22rem, 2.2vw, 1.8rem);
+  font-weight: 700;
+  color: #003f3d;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.belief-banner-title .title-accent {
+  position: relative;
+  display: inline-block;
+}
+
+.belief-banner-title .title-accent::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -3px;
+  width: 100%;
+  height: 2.5px;
+  background: #c2a570;
+  border-radius: 2px;
+  opacity: 0.85;
+}
+
+.belief-banner-desc {
+  font-family: 'Inter', sans-serif;
+  font-size: clamp(0.8rem, 1.08vw, 0.96rem);
+  font-weight: 400;
+  color: #3b4844;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.banner--01 { 
+  top: calc(-173 / 2172 * 99cqw + 12px); 
+  z-index: 2; 
+}
+.banner--02 { 
+  top: calc(-173 / 2172 * 99cqw + 12px + 295 / 2172 * 99cqw + 0.5cm); 
+  z-index: 2; 
+}
+.banner--03 { 
+  top: calc(-173 / 2172 * 99cqw + 12px + (295 + 329) / 2172 * 99cqw + 1.0cm); 
+  z-index: 3; 
+}
+.banner--04 { 
+  top: calc(-173 / 2172 * 99cqw + 12px + (295 + 329 + 327) / 2172 * 99cqw + 1.5cm); 
+  z-index: 4; 
+}
+.banner--05 { 
+  top: calc(-173 / 2172 * 99cqw + 12px + (295 + 329 + 327 + 315) / 2172 * 99cqw + 2.0cm); 
+  z-index: 5; 
+}
+
+/* Botanical olive sprig with masking tape on bottom left */
+.belief-botanical--olive {
+  left: -1.5%;
+  top: calc(-173 / 2172 * 99cqw + 12px + (295 + 329 + 327 + 315 - 110) / 2172 * 99cqw + 2.0cm);
+  width: 9.0%;
+  z-index: 10;
+}
+/* =========================================
+   MOBILE  ≤ 860 px
+   ========================================= */
+
+@media (max-width: 860px) {
+  .beliefs-editorial-section {
+    padding: 2.5rem 0 3.5rem 0;
+  }
+
+  .beliefs-header__top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+
+  .beliefs-artboard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    height: auto;
+    aspect-ratio: auto;
+    position: static;
+  }
+
+  .belief-banner-item {
+    position: relative;
+    left: 0;
+    top: 0 !important;
+    width: 100%;
+    max-width: 620px;
+    margin: 0 auto;
+  }
+
+  .belief-botanical--olive {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .beliefs-header__title {
+    font-size: 2.2rem;
+  }
+
+  .beliefs-header__annotation {
+    font-size: 1.35rem;
+  }
+
+  .beliefs-artboard {
+    gap: 0.4rem;
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "appId": "com.thefourthwall.studio",
+  "appName": "The Fourth Wall",
+  "webDir": "pwa",
+  "server": { "androidScheme": "https" }
+}

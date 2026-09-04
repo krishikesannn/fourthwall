@@ -1,0 +1,426 @@
+:root {
+  --paper-bg: #efe2cf;
+  --teal: #003f3d;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #efe2cf url('../assets/images/beige_paper_texture.jpg') repeat;
+  background-size: 1024px auto;
+}
+
+
+/* =========================================
+   NAV ALIGNMENT (SERVICES PAGE)
+========================================= */
+
+.mag-nav__inner {
+  max-width: min(96vw, 1122px);
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.services-page {
+  width: 100%;
+  margin: 0;
+  padding: 0 0 3rem 0;
+  display: flex;
+  justify-content: center;
+  background: #efe2cf url('../assets/images/beige_paper_texture.jpg') repeat;
+  background-size: 1024px auto;
+  overflow: hidden;
+}
+
+
+/*
+REFERENCE RATIO:
+1122 x 1402
+
+This artboard keeps exactly that shape and fills the page.
+*/
+
+.services-artboard {
+  position: relative;
+
+  width: min(96vw, 1122px);
+
+  aspect-ratio: 1122 / 1402;
+
+  margin: 0 auto;
+
+  background: #efe2cf url('../assets/images/beige_paper_texture.jpg') repeat;
+  background-size: 1024px auto;
+
+  overflow: hidden;
+}
+
+
+/* subtle texture */
+
+.services-artboard::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+
+  opacity: .1;
+
+  background-image:
+    repeating-radial-gradient(
+      circle at 0 0,
+      rgba(80,55,30,.13) 0 .55px,
+      transparent .8px 3px
+    );
+}
+
+
+/* =========================================
+   ALL PNG ELEMENTS
+========================================= */
+
+.asset {
+  position: absolute;
+  display: block;
+
+  height: auto;
+
+  object-fit: contain;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.3s ease;
+}
+
+
+/* =========================================
+   TITLE
+========================================= */
+
+.services-title {
+  position: absolute;
+
+  left: 4.8%;
+  top: 2.8%;
+
+  width: 35%;
+  z-index: 10;
+}
+
+.services-title h1 {
+  margin: 0;
+
+  color: #0d3932;
+
+  font-family:
+    "Playfair Display",
+    "Cormorant Garamond",
+    "Times New Roman",
+    serif;
+
+  font-size: clamp(38px, 4.8vw, 55px);
+
+  line-height: .90;
+
+  font-weight: 800;
+
+  letter-spacing: -0.018em;
+  white-space: nowrap;
+}
+
+
+/* =========================================
+   INTRO NOTE
+========================================= */
+
+.intro-note {
+  left: 8.5%;
+  top: 7.2%;
+
+  width: 30.0%;
+  z-index: 6;
+  pointer-events: none;
+}
+
+
+/* =========================================
+   BRANDING
+========================================= */
+
+.branding-card {
+  left: 44.5%;
+  top: 0.2%;
+
+  width: 49.69%;
+  z-index: 2;
+  filter: drop-shadow(0 14px 28px rgba(40, 25, 10, 0.14));
+}
+
+
+/* =========================================
+   FLOWERS — LEFT (AI CARD)
+========================================= */
+
+.flowers-top {
+  left: 0.5%;
+  top: 62.0%;
+
+  width: 24.0%;
+  z-index: 8;
+  transform: rotate(-25deg);
+  pointer-events: none;
+  filter: drop-shadow(1px 6px 12px rgba(45, 30, 15, 0.12));
+}
+
+
+/* =========================================
+   MARKETING
+========================================= */
+
+.marketing-card {
+  left: 2.8%;
+  top: 25.6%;
+
+  width: 29.5%;
+  z-index: 3;
+  filter: drop-shadow(0 12px 24px rgba(40, 25, 10, 0.12));
+}
+
+.marketing-photo {
+  left: 26.8%;
+  top: 27.2%;
+
+  width: 30.4%;
+  z-index: 2;
+
+  transform: rotate(1deg);
+  filter: drop-shadow(0 16px 32px rgba(40, 25, 10, 0.18));
+}
+
+
+/* =========================================
+   WEBSITE
+========================================= */
+
+.website-card {
+  left: 57.5%;
+  top: 29.5%;
+
+  width: 34.22%;
+  z-index: 6;
+  filter: drop-shadow(0 14px 28px rgba(40, 25, 10, 0.13));
+}
+
+.website-photo {
+  display: none;
+}
+
+
+/* =========================================
+   LOWER FLOWERS
+========================================= */
+
+.flowers-bottom {
+  left: 80.0%;
+  top: 27.8%;
+
+  width: 20.0%;
+  z-index: 7;
+  pointer-events: none;
+  filter: drop-shadow(1px 6px 12px rgba(45, 30, 15, 0.12));
+}
+
+
+/* =========================================
+   AI
+========================================= */
+
+.ai-card {
+  left: 13.5%;
+  top: 57.2%;
+
+  width: 38.0%;
+  z-index: 7;
+  filter: drop-shadow(0 18px 36px rgba(7, 40, 35, 0.22));
+}
+
+
+/* =========================================
+   AI PHOTO
+========================================= */
+
+.ai-photo {
+  left: 49.5%;
+  top: 60.0%;
+
+  width: 45.87%;
+  z-index: 8;
+
+  transform: rotate(1deg);
+  filter: drop-shadow(0 16px 32px rgba(40, 25, 10, 0.18));
+}
+
+
+/* =========================================
+   BOTTOM NOTE
+========================================= */
+
+.impact-note {
+  left: 62.0%;
+  top: 83.5%;
+
+  width: 24%;
+  z-index: 9;
+  pointer-events: none;
+}
+
+
+/* =========================================
+   INTERACTIVE HOVER (DESKTOP)
+========================================= */
+
+@media (hover: hover) {
+  .asset:not(.flowers-top):not(.flowers-bottom):not(.impact-note):not(.intro-note):hover {
+    transform: translateY(-4px) scale(1.012);
+    filter: drop-shadow(0 20px 40px rgba(35, 20, 10, 0.22));
+    z-index: 20;
+  }
+}
+
+
+/* =========================================
+   RESPONSIVE DESKTOP
+========================================= */
+
+@media (min-width: 900px) {
+  .services-artboard {
+    width: min(96vw, 1122px);
+  }
+}
+
+
+/* =========================================
+   MOBILE
+========================================= */
+
+@media (max-width: 700px) {
+
+  .services-page {
+    overflow: visible;
+  }
+
+  .services-artboard {
+    width: 100%;
+    aspect-ratio: auto;
+
+    padding:
+      30px
+      18px
+      60px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 20px;
+
+    overflow: visible;
+  }
+
+  .services-artboard::before {
+    position: fixed;
+  }
+
+  .services-title,
+  .asset {
+    position: relative;
+
+    left: auto;
+    right: auto;
+    top: auto;
+    bottom: auto;
+
+    width: 100%;
+
+    transform: none;
+
+    margin: 0;
+  }
+
+  .services-title {
+    width: 100%;
+  }
+
+  .services-title h1 {
+    font-size: clamp(42px, 14vw, 64px);
+
+    line-height: .87;
+    white-space: normal;
+  }
+
+
+  /* Intro remains smaller */
+
+  .intro-note {
+    width: 72%;
+
+    align-self: flex-start;
+  }
+
+
+  /* service blocks */
+
+  .branding-card {
+    width: 92%;
+
+    align-self: flex-end;
+  }
+
+  .marketing-card {
+    width: 92%;
+
+    align-self: flex-start;
+  }
+
+  .marketing-photo {
+    width: 86%;
+
+    align-self: center;
+  }
+
+  .website-card {
+    width: 92%;
+
+    align-self: flex-end;
+  }
+
+  .ai-card {
+    width: 94%;
+
+    align-self: flex-start;
+  }
+
+  .ai-photo {
+    width: 88%;
+
+    align-self: center;
+  }
+
+
+  /* flowers */
+
+  .flowers-top,
+  .flowers-bottom {
+    display: none;
+  }
+
+
+  .impact-note {
+    width: 72%;
+
+    align-self: flex-end;
+  }
+
+}

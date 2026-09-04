@@ -1,0 +1,22 @@
+create type public.app_role as enum ('admin', 'studio_member', 'client');
+create type public.inquiry_status as enum ('new', 'contacted', 'qualified', 'closed');
+create type public.deliverable_status as enum ('draft', 'in_review', 'approved');
+
+create table public.profiles (id uuid primary key references auth.users(id) on delete cascade, full_name text not null, role public.app_role not null default 'client', created_at timestamptz not null default now());
+create table public.clients (id uuid primary key default gen_random_uuid(), studio_id uuid not null references public.profiles(id), name text not null, created_at timestamptz not null default now());
+create table public.projects (id uuid primary key default gen_random_uuid(), client_id uuid not null references public.clients(id) on delete cascade, name text not null, service text not null, status text not null default 'planning', progress smallint not null default 0 check (progress between 0 and 100), due_date date, created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+create table public.project_members (project_id uuid references public.projects(id) on delete cascade, user_id uuid references public.profiles(id) on delete cascade, role public.app_role not null, primary key(project_id,user_id));
+create table public.deliverables (id uuid primary key default gen_random_uuid(), project_id uuid not null references public.projects(id) on delete cascade, title text not null, status public.deliverable_status not null default 'draft', version integer not null default 1, created_at timestamptz not null default now());
+create table public.project_updates (id uuid primary key default gen_random_uuid(), project_id uuid not null references public.projects(id) on delete cascade, author_id uuid not null references public.profiles(id), title text not null, body text not null, client_visible boolean not null default true, created_at timestamptz not null default now());
+create table public.inquiries (id uuid primary key default gen_random_uuid(), name text not null, email text not null, company text, service text, details text not null, source text not null default 'website', status public.inquiry_status not null default 'new', created_at timestamptz not null default now());
+create table public.messages (id uuid primary key default gen_random_uuid(), project_id uuid not null references public.projects(id) on delete cascade, author_id uuid not null references public.profiles(id), body text not null, created_at timestamptz not null default now(), read_at timestamptz);
+
+alter table public.profiles enable row level security; alter table public.clients enable row level security; alter table public.projects enable row level security; alter table public.project_members enable row level security; alter table public.deliverables enable row level security; alter table public.project_updates enable row level security; alter table public.inquiries enable row level security; alter table public.messages enable row level security;
+create function public.can_access_project(target uuid) returns boolean language sql stable security definer set search_path=public as $$ select exists(select 1 from public.project_members where project_id=target and user_id=auth.uid()) or exists(select 1 from public.projects p join public.clients c on c.id=p.client_id where p.id=target and c.studio_id=auth.uid()) $$;
+create policy "users read own profile" on public.profiles for select using (id=auth.uid());
+create policy "members read projects" on public.projects for select using (public.can_access_project(id));
+create policy "members read deliverables" on public.deliverables for select using (public.can_access_project(project_id));
+create policy "members read visible updates" on public.project_updates for select using (public.can_access_project(project_id) and (client_visible or exists(select 1 from public.profiles where id=auth.uid() and role in ('admin','studio_member'))));
+create policy "members read messages" on public.messages for select using (public.can_access_project(project_id));
+create policy "members send messages" on public.messages for insert with check (author_id=auth.uid() and public.can_access_project(project_id));
+create policy "studio manages inquiries" on public.inquiries for all using (exists(select 1 from public.profiles where id=auth.uid() and role in ('admin','studio_member'))) with check (exists(select 1 from public.profiles where id=auth.uid() and role in ('admin','studio_member')));

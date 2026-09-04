@@ -1,0 +1,123 @@
+/* ==========================================================================
+   THE FOURTH WALL — PROCESS PAGE (REACT COMPONENT STYLES)
+   ========================================================================== */
+
+:root {
+  --process-bg: #efe2cf;
+  --process-teal: #003f3d;
+  --process-gold: #b58c54;
+}
+
+.process-page {
+  width: 100%;
+  margin: 0;
+  padding: 0 0 3rem 0;
+  display: flex;
+  justify-content: center;
+  background: var(--process-bg);
+  overflow: hidden;
+}
+
+/* Reference artboard (819 x 1024 / 1122 x 1402 ratio) */
+.process-artboard {
+  position: relative;
+  width: min(96vw, 1122px);
+  aspect-ratio: 819 / 1024;
+  margin: 0 auto;
+  background: var(--process-bg);
+  overflow: hidden;
+}
+
+/* Individual Asset Layers */
+.process-artboard .asset {
+  position: absolute;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* 1. Header */
+.process-artboard .editorial-header {
+  left: 2.4%;
+  top: 7.6%;
+  width: 95.2%;
+  z-index: 2;
+}
+
+/* 2. Centered Quote */
+.process-artboard .process-quote {
+  left: 29.3%;
+  top: 18.0%;
+  width: 46.4%;
+  z-index: 2;
+}
+
+/* 3. Golden Timeline Divider */
+.process-artboard .timeline-divider {
+  left: 47.6%;
+  top: 29.2%;
+  width: 9.8%;
+  z-index: 1;
+}
+
+/* 4. Card 01 - LISTEN */
+.process-artboard .card-listen {
+  left: 12.8%;
+  top: 28.3%;
+  width: 37.2%;
+  z-index: 2;
+  filter: drop-shadow(0 10px 20px rgba(40, 25, 10, 0.08));
+}
+
+/* 5. Card 02 - DISCOVER */
+.process-artboard .card-discover {
+  left: 51.2%;
+  top: 39.0%;
+  width: 36.0%;
+  z-index: 2;
+  filter: drop-shadow(0 10px 20px rgba(40, 25, 10, 0.08));
+}
+
+/* 6. Card 03 - CONCEPT */
+.process-artboard .card-concept {
+  left: 12.2%;
+  top: 48.3%;
+  width: 36.6%;
+  z-index: 2;
+  filter: drop-shadow(0 10px 20px rgba(40, 25, 10, 0.08));
+}
+
+/* 7. Card 04 - DESIGN */
+.process-artboard .card-design {
+  left: 51.2%;
+  top: 57.1%;
+  width: 36.0%;
+  z-index: 2;
+  filter: drop-shadow(0 10px 20px rgba(40, 25, 10, 0.08));
+}
+
+/* 8. Card 05 - BUILD */
+.process-artboard .card-build {
+  left: 12.8%;
+  top: 65.9%;
+  width: 36.0%;
+  z-index: 2;
+  filter: drop-shadow(0 10px 20px rgba(40, 25, 10, 0.08));
+}
+
+/* 9. Card 06 - LAUNCH */
+.process-artboard .card-launch {
+  left: 51.2%;
+  top: 74.2%;
+  width: 35.4%;
+  z-index: 2;
+  filter: drop-shadow(0 10px 20px rgba(40, 25, 10, 0.08));
+}
+
+/* 10. Card 07 - GROW */
+.process-artboard .card-grow {
+  left: 12.2%;
+  top: 83.4%;
+  width: 36.6%;
+  z-index: 2;
+  filter: drop-shadow(0 10px 20px rgba(40, 25, 10, 0.08));
+}
