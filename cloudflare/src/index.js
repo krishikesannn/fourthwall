@@ -1,4 +1,7 @@
 const encoder = new TextEncoder();
+// Kept within Cloudflare Workers Free request CPU limits while still avoiding a
+// single-pass password hash. Raise this when moving to a paid CPU allocation.
+const PBKDF2_ITERATIONS = 50000;
 const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
 const deny = (message, status = 401) => json({ error: message }, status);
 const toHex = (bytes) => [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -7,7 +10,7 @@ const random = () => toHex(crypto.getRandomValues(new Uint8Array(32)));
 async function digest(value) { return toHex(await crypto.subtle.digest("SHA-256", encoder.encode(value))); }
 async function passwordHash(password, salt) {
   const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: encoder.encode(salt), iterations: 210000, hash: "SHA-256" }, key, 256);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: encoder.encode(salt), iterations: PBKDF2_ITERATIONS, hash: "SHA-256" }, key, 256);
   return toHex(bits);
 }
 function readToken(request) {

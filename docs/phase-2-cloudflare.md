@@ -1,6 +1,6 @@
 # Phase 2: Cloudflare authentication foundation
 
-The free deployment path uses Cloudflare Pages for the PWA and Worker, D1 for relational data, and server-side opaque sessions. Credentials are PBKDF2-hashed with a unique salt; browser clients receive only an HTTP-only, secure, same-site session cookie.
+The free deployment path uses Cloudflare Pages for the PWA and Worker, D1 for relational data, and server-side opaque sessions. Credentials are PBKDF2-hashed with a unique salt at 50,000 iterations, which stays within Cloudflare Workers Free request CPU limits; browser clients receive only an HTTP-only, secure, same-site session cookie.
 
 ## One-time setup
 
