@@ -1,5 +1,7 @@
+# Cloudflare's Git integration runs this command from the repository root.
+# Keep this root config in sync with cloudflare/wrangler.toml for local work.
 name = "fourthwall"
-main = "src/index.js"
+main = "cloudflare/src/index.js"
 compatibility_date = "2026-09-06"
 workers_dev = true
 
