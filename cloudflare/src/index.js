@@ -2,7 +2,7 @@ const encoder = new TextEncoder();
 // Kept within Cloudflare Workers Free request CPU limits while still avoiding a
 // single-pass password hash. Raise this when moving to a paid CPU allocation.
 const PBKDF2_ITERATIONS = 50000;
-const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", ...headers } });
+const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*", ...headers } });
 const deny = (message, status = 401) => json({ error: message }, status);
 const toHex = (bytes) => [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 const random = () => toHex(crypto.getRandomValues(new Uint8Array(32)));
@@ -55,7 +55,7 @@ async function createSession(env, userId) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (request.method === "OPTIONS") return new Response(null, { headers: { "access-control-allow-methods": "GET,POST,OPTIONS", "access-control-allow-headers": "content-type,authorization" } });
+    if (request.method === "OPTIONS") return new Response(null, { headers: { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,POST,PATCH,OPTIONS", "access-control-allow-headers": "content-type,authorization" } });
     if (url.pathname === "/api/health") return json({ ok: true, service: "the-fourth-wall-api" });
 
     if (url.pathname === "/api/auth/bootstrap" && request.method === "POST") {
@@ -176,6 +176,15 @@ export default {
       return json({ ok: true, client: { id: client.id, email: client.email } }, 201);
     }
     const updateMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/updates$/);
+    const deliverableMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/deliverables$/);
+    if (deliverableMatch && request.method === "POST") {
+      const user = await userFromRequest(request, env); if (!studio(user)) return deny("Studio access required", 403);
+      const payload = await body(request); const title = String(payload?.title || "").trim().slice(0, 180);
+      if (!title) return deny("Deliverable title is required", 400);
+      const id = crypto.randomUUID();
+      await env.DB.prepare("insert into deliverables (id,project_id,title,status,sort_order) values (?,?,?,?,?)").bind(id, deliverableMatch[1], title, "draft", Number(payload?.sortOrder) || 0).run();
+      return json({ deliverable: { id, title, status: "draft" } }, 201);
+    }
     if (updateMatch && request.method === "GET") {
       const user = await userFromRequest(request, env); if (!user || !(await canAccessProject(env, user, updateMatch[1]))) return deny("Project access required", 403);
       const sql = studio(user) ? "select * from project_updates where project_id=? order by created_at desc" : "select * from project_updates where project_id=? and visible_to_client=1 order by created_at desc";
