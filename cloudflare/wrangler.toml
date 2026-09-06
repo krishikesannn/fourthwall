@@ -1,0 +1,9 @@
+name = "the-fourth-wall-api"
+main = "src/index.js"
+compatibility_date = "2026-09-06"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "the-fourth-wall"
+database_id = "REPLACE_WITH_CLOUDFLARE_D1_DATABASE_ID"
