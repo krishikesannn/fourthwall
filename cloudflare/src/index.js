@@ -57,6 +57,17 @@ export default {
     if (url.pathname === "/api/auth/me" && request.method === "GET") {
       const user = await userFromRequest(request, env); return user ? json({ user }) : deny("Sign in required");
     }
+    if (url.pathname === "/api/inquiries" && request.method === "POST") {
+      const payload = await request.json().catch(() => null);
+      if (!payload || payload.website) return json({ ok: true }, 202);
+      const name = String(payload.name || "").trim().slice(0, 120);
+      const email = String(payload.email || "").trim().toLowerCase().slice(0, 200);
+      const details = String(payload.details || "").trim().slice(0, 5000);
+      if (!name || !/^\S+@\S+\.\S+$/.test(email) || !details) return deny("Please provide your name, a valid email, and project details.", 400);
+      await env.DB.prepare("insert into inquiries (id,name,email,phone,company,service,details) values (?,?,?,?,?,?,?)")
+        .bind(crypto.randomUUID(), name, email, String(payload.phone || "").trim().slice(0, 60), String(payload.company || "").trim().slice(0, 160), String(payload.service || "").trim().slice(0, 160), details).run();
+      return json({ ok: true, message: "Inquiry received." }, 201);
+    }
     return deny("Not found", 404);
   }
 };
