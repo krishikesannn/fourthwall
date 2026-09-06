@@ -39,6 +39,18 @@ function projectInput(payload) {
   const progress = Number.isInteger(Number(payload?.progress)) ? Math.max(0, Math.min(100, Number(payload.progress))) : 0;
   return { name, service, status, dueDate, progress };
 }
+function clientAccessInput(payload) {
+  const email = String(payload?.email || "").trim().toLowerCase().slice(0, 200);
+  const displayName = String(payload?.displayName || email.split("@")[0] || "Client").trim().slice(0, 120);
+  const code = String(payload?.code || "").trim();
+  return { email, displayName, code };
+}
+async function createSession(env, userId) {
+  const token = random();
+  const expires = new Date(Date.now() + 7 * 86400000).toISOString();
+  await env.DB.prepare("insert into sessions (id,user_id,token_hash,expires_at) values (?,?,?,?)").bind(crypto.randomUUID(), userId, await digest(token), expires).run();
+  return token;
+}
 
 export default {
   async fetch(request, env) {
@@ -61,10 +73,21 @@ export default {
       const { email, password } = await body(request) || {};
       const user = await env.DB.prepare("select * from users where email=?").bind(String(email || "").trim().toLowerCase()).first();
       if (!user || typeof password !== "string" || (await passwordHash(password, user.password_salt)) !== user.password_hash) return deny("Invalid email or password");
-      const token = random();
-      const expires = new Date(Date.now() + 7 * 86400000).toISOString();
-      await env.DB.prepare("insert into sessions (id,user_id,token_hash,expires_at) values (?,?,?,?)").bind(crypto.randomUUID(), user.id, await digest(token), expires).run();
-      return json({ user: { id: user.id, email: user.email, displayName: user.display_name, role: user.role } }, 200, { "set-cookie": cookie(token) });
+      const token = await createSession(env, user.id);
+      return json({ user: { id: user.id, email: user.email, displayName: user.display_name, role: user.role }, token }, 200, { "set-cookie": cookie(token) });
+    }
+
+    if (url.pathname === "/api/auth/client-login" && request.method === "POST") {
+      const { email, code } = clientAccessInput(await body(request));
+      if (!/^\S+@\S+\.\S+$/.test(email) || code.length < 6) return deny("Use your client email and project access code", 400);
+      const rows = await env.DB.prepare("select u.id,u.email,u.display_name,u.role,pac.project_id,pac.access_salt,pac.access_hash from project_access_codes pac join users u on u.id=pac.user_id where u.email=? and u.role='client'").bind(email).all();
+      let access = null;
+      for (const row of rows.results) {
+        if (row.access_hash === await passwordHash(code, row.access_salt)) { access = row; break; }
+      }
+      if (!access) return deny("That email and access code do not match");
+      const token = await createSession(env, access.id);
+      return json({ user: { id: access.id, email: access.email, displayName: access.display_name, role: access.role }, projectId: access.project_id, token }, 200, { "set-cookie": cookie(token) });
     }
 
     if (url.pathname === "/api/auth/logout" && request.method === "POST") {
@@ -117,12 +140,40 @@ export default {
       return json({ project: { id, ...input } }, 201);
     }
     const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
+    if (projectMatch && request.method === "GET") {
+      const user = await userFromRequest(request, env); if (!user || !(await canAccessProject(env, user, projectMatch[1]))) return deny("Project access required", 403);
+      const project = await env.DB.prepare("select * from projects where id=?").bind(projectMatch[1]).first();
+      if (!project) return deny("Project not found", 404);
+      const deliverables = await env.DB.prepare("select id,title,status,sort_order,approved_at from deliverables where project_id=? order by sort_order,created_at").bind(projectMatch[1]).all();
+      return json({ project, deliverables: deliverables.results });
+    }
     if (projectMatch && request.method === "PATCH") {
       const user = await userFromRequest(request, env); if (!studio(user)) return deny("Studio access required", 403);
       const input = projectInput(await body(request));
       if (!input.name || !input.service) return deny("Project name and service are required", 400);
       const result = await env.DB.prepare("update projects set name=?,service=?,status=?,due_date=?,progress=?,updated_at=current_timestamp where id=?").bind(input.name, input.service, input.status, input.dueDate, input.progress, projectMatch[1]).run();
       return result.meta.changes ? json({ project: { id: projectMatch[1], ...input } }) : deny("Project not found", 404);
+    }
+    const clientAccessMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/client-access$/);
+    if (clientAccessMatch && request.method === "POST") {
+      const user = await userFromRequest(request, env); if (!studio(user)) return deny("Studio access required", 403);
+      const project = await env.DB.prepare("select id from projects where id=?").bind(clientAccessMatch[1]).first();
+      if (!project) return deny("Project not found", 404);
+      const input = clientAccessInput(await body(request));
+      if (!/^\S+@\S+\.\S+$/.test(input.email) || input.code.length < 6 || input.code.length > 128) return deny("Use a valid client email and a code of at least 6 characters", 400);
+      let client = await env.DB.prepare("select id,email,role from users where email=?").bind(input.email).first();
+      if (client && client.role !== "client") return deny("That email belongs to a studio user", 409);
+      if (!client) {
+        const id = crypto.randomUUID(); const salt = random();
+        await env.DB.prepare("insert into users (id,email,display_name,role,password_salt,password_hash) values (?,?,?,?,?,?)").bind(id, input.email, input.displayName, "client", salt, await passwordHash(random(), salt)).run();
+        client = { id, email: input.email, role: "client" };
+      }
+      const codeSalt = random(); const codeHash = await passwordHash(input.code, codeSalt);
+      await env.DB.batch([
+        env.DB.prepare("insert into project_members (project_id,user_id,role) values (?,?,?) on conflict(project_id,user_id) do update set role=excluded.role").bind(clientAccessMatch[1], client.id, "client"),
+        env.DB.prepare("insert into project_access_codes (project_id,user_id,access_salt,access_hash,rotated_at) values (?,?,?,?,current_timestamp) on conflict(project_id,user_id) do update set access_salt=excluded.access_salt,access_hash=excluded.access_hash,rotated_at=current_timestamp").bind(clientAccessMatch[1], client.id, codeSalt, codeHash)
+      ]);
+      return json({ ok: true, client: { id: client.id, email: client.email } }, 201);
     }
     const updateMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/updates$/);
     if (updateMatch && request.method === "GET") {
