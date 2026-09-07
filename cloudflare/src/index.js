@@ -31,6 +31,14 @@ async function canAccessProject(env, user, projectId) {
   if (studio(user)) return true;
   return Boolean(await env.DB.prepare("select 1 from project_members where project_id=? and user_id=?").bind(projectId, user.id).first());
 }
+const FILE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf", "application/zip"]);
+function safeFileName(value) {
+  return String(value || "file").normalize("NFKC").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120) || "file";
+}
+function storageHeaders(env, mimeType) {
+  return { authorization: `Bearer ${env.SUPABASE_SECRET_KEY}`, apikey: env.SUPABASE_SECRET_KEY, ...(mimeType ? { "content-type": mimeType } : {}) };
+}
+function storageReady(env) { return env.SUPABASE_URL && env.SUPABASE_SECRET_KEY && env.SUPABASE_STORAGE_BUCKET; }
 function projectInput(payload) {
   const name = String(payload?.name || "").trim().slice(0, 160);
   const service = String(payload?.service || "").trim().slice(0, 160);
@@ -89,7 +97,7 @@ async function createSession(env, userId) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (request.method === "OPTIONS") return new Response(null, { headers: { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,POST,PATCH,OPTIONS", "access-control-allow-headers": "content-type,authorization" } });
+    if (request.method === "OPTIONS") return new Response(null, { headers: { "access-control-allow-origin": "*", "access-control-allow-methods": "GET,POST,PATCH,OPTIONS", "access-control-allow-headers": "content-type,authorization,x-file-name,x-deliverable-id" } });
     if (url.pathname === "/api/health") return json({ ok: true, service: "the-fourth-wall-api" });
 
     if (url.pathname === "/api/auth/bootstrap" && request.method === "POST") {
@@ -225,6 +233,74 @@ export default {
       const id = crypto.randomUUID();
       await env.DB.prepare("insert into deliverables (id,project_id,title,status,sort_order) values (?,?,?,?,?)").bind(id, deliverableMatch[1], title, "draft", Number(payload?.sortOrder) || 0).run();
       return json({ deliverable: { id, title, status: "draft" } }, 201);
+    }
+    const filesMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/files$/);
+    if (filesMatch && request.method === "GET") {
+      const user = await userFromRequest(request, env); if (!user || !(await canAccessProject(env, user, filesMatch[1]))) return deny("Project access required", 403);
+      const rows = await env.DB.prepare("select pf.id,pf.project_id,pf.deliverable_id,pf.file_name,pf.mime_type,pf.size_bytes,pf.version,pf.created_at,u.display_name uploaded_by from project_files pf join users u on u.id=pf.uploaded_by where pf.project_id=? order by pf.created_at desc").bind(filesMatch[1]).all();
+      return json({ files: rows.results });
+    }
+    if (filesMatch && request.method === "POST") {
+      const user = await userFromRequest(request, env); if (!user || !(await canAccessProject(env, user, filesMatch[1]))) return deny("Project access required", 403);
+      if (!storageReady(env)) return deny("File storage is not configured", 503);
+      const mimeType = String(request.headers.get("content-type") || "").split(";")[0].toLowerCase();
+      const length = Number(request.headers.get("content-length") || 0);
+      if (!FILE_TYPES.has(mimeType)) return deny("Use a JPG, PNG, WebP, PDF, or ZIP file", 415);
+      if (length > 26214400) return deny("Files must be 25 MB or smaller", 413);
+      const deliverableId = request.headers.get("x-deliverable-id") || null;
+      if (deliverableId) {
+        const belongs = await env.DB.prepare("select 1 from deliverables where id=? and project_id=?").bind(deliverableId, filesMatch[1]).first();
+        if (!belongs) return deny("Deliverable not found", 404);
+      }
+      const bytes = await request.arrayBuffer();
+      if (!bytes.byteLength || bytes.byteLength > 26214400) return deny("Files must be between 1 byte and 25 MB", 413);
+      const fileName = safeFileName(decodeURIComponent(request.headers.get("x-file-name") || "file"));
+      const versionRow = deliverableId ? await env.DB.prepare("select coalesce(max(version),0)+1 next from project_files where deliverable_id=?").bind(deliverableId).first() : { next: 1 };
+      const id = crypto.randomUUID(), version = Number(versionRow?.next || 1);
+      const storagePath = `${filesMatch[1]}/${deliverableId || "shared"}/${id}-${fileName}`;
+      const endpoint = `${env.SUPABASE_URL}/storage/v1/object/${encodeURIComponent(env.SUPABASE_STORAGE_BUCKET)}/${storagePath.split("/").map(encodeURIComponent).join("/")}`;
+      const stored = await fetch(endpoint, { method: "POST", headers: { ...storageHeaders(env, mimeType), "x-upsert": "false" }, body: bytes });
+      if (!stored.ok) { console.error("Storage upload failed", stored.status, await stored.text()); return deny("The file could not be stored", 502); }
+      try {
+        await env.DB.prepare("insert into project_files (id,project_id,deliverable_id,storage_path,file_name,mime_type,size_bytes,version,uploaded_by) values (?,?,?,?,?,?,?,?,?)").bind(id, filesMatch[1], deliverableId, storagePath, fileName, mimeType, bytes.byteLength, version, user.id).run();
+      } catch (error) {
+        await fetch(endpoint, { method: "DELETE", headers: storageHeaders(env) }); throw error;
+      }
+      return json({ file: { id, projectId: filesMatch[1], deliverableId, fileName, mimeType, sizeBytes: bytes.byteLength, version } }, 201);
+    }
+    const fileDownloadMatch = url.pathname.match(/^\/api\/files\/([^/]+)\/download$/);
+    if (fileDownloadMatch && request.method === "GET") {
+      const user = await userFromRequest(request, env); if (!user) return deny("Sign in required");
+      const file = await env.DB.prepare("select * from project_files where id=?").bind(fileDownloadMatch[1]).first();
+      if (!file || !(await canAccessProject(env, user, file.project_id))) return deny("File not found", 404);
+      const endpoint = `${env.SUPABASE_URL}/storage/v1/object/${encodeURIComponent(env.SUPABASE_STORAGE_BUCKET)}/${file.storage_path.split("/").map(encodeURIComponent).join("/")}`;
+      const stored = await fetch(endpoint, { headers: storageHeaders(env) });
+      if (!stored.ok) return deny("The file could not be downloaded", 502);
+      return new Response(stored.body, { headers: { "content-type": file.mime_type, "content-length": String(file.size_bytes), "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.file_name)}`, "cache-control": "private, no-store", "access-control-allow-origin": "*" } });
+    }
+    const approvalMatch = url.pathname.match(/^\/api\/deliverables\/([^/]+)\/approvals$/);
+    if (approvalMatch && request.method === "GET") {
+      const user = await userFromRequest(request, env); if (!user) return deny("Sign in required");
+      const deliverable = await env.DB.prepare("select project_id from deliverables where id=?").bind(approvalMatch[1]).first();
+      if (!deliverable || !(await canAccessProject(env, user, deliverable.project_id))) return deny("Deliverable not found", 404);
+      const rows = await env.DB.prepare("select a.id,a.decision,a.note,a.typed_signature,a.created_at,u.display_name decided_by from deliverable_approvals a join users u on u.id=a.decided_by where a.deliverable_id=? order by a.created_at desc").bind(approvalMatch[1]).all();
+      return json({ approvals: rows.results });
+    }
+    if (approvalMatch && request.method === "POST") {
+      const user = await userFromRequest(request, env); if (!user) return deny("Sign in required");
+      const deliverable = await env.DB.prepare("select project_id from deliverables where id=?").bind(approvalMatch[1]).first();
+      if (!deliverable || !(await canAccessProject(env, user, deliverable.project_id))) return deny("Deliverable not found", 404);
+      const payload = await body(request), decision = payload?.decision;
+      if (!["approved", "changes_requested"].includes(decision)) return deny("Choose approve or request changes", 400);
+      const note = String(payload?.note || "").trim().slice(0, 3000) || null;
+      const signature = String(payload?.typedSignature || "").trim().slice(0, 160) || null;
+      if (decision === "approved" && !signature) return deny("Type your name to approve", 400);
+      const id = crypto.randomUUID();
+      await env.DB.batch([
+        env.DB.prepare("insert into deliverable_approvals (id,project_id,deliverable_id,decision,note,typed_signature,decided_by) values (?,?,?,?,?,?,?)").bind(id, deliverable.project_id, approvalMatch[1], decision, note, signature, user.id),
+        env.DB.prepare("update deliverables set status=?,approved_by=?,approved_at=case when ?='approved' then current_timestamp else null end,updated_at=current_timestamp where id=?").bind(decision === "approved" ? "approved" : "in_review", decision === "approved" ? user.id : null, decision, approvalMatch[1])
+      ]);
+      return json({ approval: { id, decision, note, typedSignature: signature } }, 201);
     }
     if (updateMatch && request.method === "GET") {
       const user = await userFromRequest(request, env); if (!user || !(await canAccessProject(env, user, updateMatch[1]))) return deny("Project access required", 403);

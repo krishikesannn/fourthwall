@@ -11,4 +11,8 @@
 .inline-form .btn { min-width: 76px; }
 .check-row { display: flex; align-items: center; gap: 10px; letter-spacing: .02em; text-transform: none; }
 .check-row input { min-height: auto; width: 18px; height: 18px; padding: 0; accent-color: var(--green); }
+.deliverable > div { flex: 1; min-width: 0; }
+.deliverable small { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; letter-spacing: .08em; }
+.deliverable .actions { grid-template-columns: 1fr; }
+input[type="file"] { width: 100%; }
 @media (max-width: 390px) { .form-split { grid-template-columns: 1fr; } }
