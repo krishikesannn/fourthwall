@@ -296,6 +296,33 @@ export default {
       const payload=await body(request);if(!["love","consider","pass"].includes(payload?.reaction))return deny("Invalid reaction",400);
       await env.DB.prepare("insert into moodboard_reactions(moodboard_id,user_id,reaction) values(?,?,?) on conflict(moodboard_id,user_id) do update set reaction=excluded.reaction,created_at=current_timestamp").bind(reactionMatch[1],user.id,payload.reaction).run();await audit(env,user,board.project_id,"reacted","moodboard",reactionMatch[1],{reaction:payload.reaction});return json({ok:true});
     }
+    const reviewsMatch=url.pathname.match(/^\/api\/projects\/([^/]+)\/reviews$/);
+    if(reviewsMatch&&request.method==="GET"){
+      const user=await userFromRequest(request,env);if(!user||!(await canAccessProject(env,user,reviewsMatch[1])))return deny("Project access required",403);
+      const rows=await env.DB.prepare("select dc.*,u.display_name author_name,pf.file_name,pf.mime_type from design_comments dc join users u on u.id=dc.created_by join project_files pf on pf.id=dc.file_id where dc.project_id=? order by dc.file_id,dc.created_at").bind(reviewsMatch[1]).all();return json({comments:rows.results});
+    }
+    if(reviewsMatch&&request.method==="POST"){
+      const user=await userFromRequest(request,env);if(!user||!(await canAccessProject(env,user,reviewsMatch[1])))return deny("Project access required",403);const payload=await body(request),text=String(payload?.body||"").trim().slice(0,3000);if(!text)return deny("Comment is required",400);
+      const file=await env.DB.prepare("select 1 from project_files where id=? and project_id=? and mime_type in('image/jpeg','image/png','image/webp','application/pdf')").bind(payload?.fileId,reviewsMatch[1]).first();if(!file)return deny("Reviewable file not found",404);
+      if(payload?.parentId){const parent=await env.DB.prepare("select 1 from design_comments where id=? and project_id=? and file_id=?").bind(payload.parentId,reviewsMatch[1],payload.fileId).first();if(!parent)return deny("Parent comment not found",404)}
+      const id=crypto.randomUUID(),x=payload?.parentId?null:Math.max(0,Math.min(100,Number(payload?.pinX)||0)),y=payload?.parentId?null:Math.max(0,Math.min(100,Number(payload?.pinY)||0));
+      await env.DB.prepare("insert into design_comments(id,project_id,file_id,parent_id,page_number,pin_x,pin_y,body,created_by) values(?,?,?,?,?,?,?,?,?)").bind(id,reviewsMatch[1],payload.fileId,payload?.parentId||null,Math.max(1,Number(payload?.pageNumber)||1),x,y,text,user.id).run();await audit(env,user,reviewsMatch[1],"commented","design_comment",id,{fileId:payload.fileId});return json({id},201);
+    }
+    const resolveMatch=url.pathname.match(/^\/api\/design-comments\/([^/]+)\/resolve$/);
+    if(resolveMatch&&request.method==="PATCH"){
+      const user=await userFromRequest(request,env);if(!studio(user))return deny("Studio access required",403);const comment=await env.DB.prepare("select project_id from design_comments where id=?").bind(resolveMatch[1]).first();if(!comment)return deny("Comment not found",404);await env.DB.prepare("update design_comments set resolved_at=current_timestamp,resolved_by=? where id=?").bind(user.id,resolveMatch[1]).run();await audit(env,user,comment.project_id,"resolved","design_comment",resolveMatch[1]);return json({ok:true});
+    }
+    const calendarMatch=url.pathname.match(/^\/api\/projects\/([^/]+)\/content-posts$/);
+    if(calendarMatch&&request.method==="GET"){
+      const user=await userFromRequest(request,env);if(!user||!(await canAccessProject(env,user,calendarMatch[1])))return deny("Project access required",403);const month=String(url.searchParams.get("month")||"").slice(0,7);const rows=await env.DB.prepare("select cp.*,(select decision from content_feedback where post_id=cp.id order by created_at desc limit 1) latest_decision,(select comment from content_feedback where post_id=cp.id order by created_at desc limit 1) latest_comment from content_posts cp where cp.project_id=? and (?='' or substr(cp.publish_at,1,7)=?) order by cp.publish_at").bind(calendarMatch[1],month,month).all();return json({posts:rows.results});
+    }
+    if(calendarMatch&&request.method==="POST"){
+      const user=await userFromRequest(request,env);if(!studio(user))return deny("Studio access required",403);const payload=await body(request),title=String(payload?.title||"").trim().slice(0,180),channel=String(payload?.channel||"").trim().slice(0,80),publishAt=String(payload?.publishAt||"").slice(0,32);if(!title||!channel||!publishAt)return deny("Title, channel and publish date are required",400);const id=crypto.randomUUID();await env.DB.prepare("insert into content_posts(id,project_id,title,channel,publish_at,caption,status,created_by) values(?,?,?,?,?,?,?,?)").bind(id,calendarMatch[1],title,channel,publishAt,String(payload?.caption||"").trim().slice(0,5000)||null,payload?.sendForApproval?"in_review":"draft",user.id).run();await audit(env,user,calendarMatch[1],"created","content_post",id,{title});return json({id},201);
+    }
+    const feedbackMatch=url.pathname.match(/^\/api\/content-posts\/([^/]+)\/feedback$/);
+    if(feedbackMatch&&request.method==="POST"){
+      const user=await userFromRequest(request,env);if(!user)return deny("Sign in required");const post=await env.DB.prepare("select project_id from content_posts where id=?").bind(feedbackMatch[1]).first();if(!post||!(await canAccessProject(env,user,post.project_id)))return deny("Post not found",404);const payload=await body(request),decision=payload?.decision,comment=String(payload?.comment||"").trim().slice(0,3000)||null;if(!["approved","changes_requested"].includes(decision))return deny("Choose approve or request changes",400);if(decision==="changes_requested"&&!comment)return deny("Describe the requested change",400);const id=crypto.randomUUID();await env.DB.batch([env.DB.prepare("insert into content_feedback(id,post_id,decision,comment,created_by) values(?,?,?,?,?)").bind(id,feedbackMatch[1],decision,comment,user.id),env.DB.prepare("update content_posts set status=?,updated_at=current_timestamp where id=?").bind(decision,feedbackMatch[1])]);await audit(env,user,post.project_id,decision,"content_post",feedbackMatch[1],{comment});return json({id},201);
+    }
     if (deliverableMatch && request.method === "POST") {
       const user = await userFromRequest(request, env); if (!studio(user)) return deny("Studio access required", 403);
       const payload = await body(request); const title = String(payload?.title || "").trim().slice(0, 180);
