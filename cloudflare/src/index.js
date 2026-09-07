@@ -258,6 +258,44 @@ export default {
     }
     const updateMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/updates$/);
     const deliverableMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/deliverables$/);
+    const workspaceMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/workspace$/);
+    if (workspaceMatch && request.method === "GET") {
+      const user = await userFromRequest(request, env); if (!user || !(await canAccessProject(env, user, workspaceMatch[1]))) return deny("Project access required", 403);
+      const projectId = workspaceMatch[1];
+      const [milestones, tasks, messages, moodboards] = await Promise.all([
+        env.DB.prepare("select * from milestones where project_id=? order by due_date,created_at").bind(projectId).all(),
+        studio(user) ? env.DB.prepare("select t.*,u.display_name assignee_name from project_tasks t left join users u on u.id=t.assignee_id where t.project_id=? order by t.status,t.due_date").bind(projectId).all() : Promise.resolve({ results: [] }),
+        env.DB.prepare("select m.*,u.display_name sender_name,case when mr.user_id is null then 0 else 1 end is_read from project_messages m join users u on u.id=m.sender_id left join message_reads mr on mr.message_id=m.id and mr.user_id=? where m.project_id=? order by m.created_at desc limit 100").bind(user.id,projectId).all(),
+        env.DB.prepare("select mb.*,pf.file_name,pf.mime_type,mr.reaction from moodboards mb left join project_files pf on pf.id=mb.file_id left join moodboard_reactions mr on mr.moodboard_id=mb.id and mr.user_id=? where mb.project_id=? order by mb.created_at desc").bind(user.id,projectId).all()
+      ]);
+      return json({ milestones: milestones.results, tasks: tasks.results, messages: messages.results, moodboards: moodboards.results });
+    }
+    const collaborationMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/(milestones|tasks|messages|moodboards)$/);
+    if (collaborationMatch && request.method === "POST") {
+      const user = await userFromRequest(request, env); if (!user || !(await canAccessProject(env,user,collaborationMatch[1]))) return deny("Project access required",403);
+      const projectId=collaborationMatch[1], type=collaborationMatch[2], payload=await body(request), id=crypto.randomUUID();
+      if (type!=="messages"&&!studio(user)) return deny("Studio access required",403);
+      if (type==="messages") {
+        const text=String(payload?.body||"").trim().slice(0,5000); if(!text) return deny("Message is required",400);
+        await env.DB.prepare("insert into project_messages(id,project_id,body,file_id,sender_id) values(?,?,?,?,?)").bind(id,projectId,text,payload?.fileId||null,user.id).run();
+      } else if(type==="milestones") {
+        const title=String(payload?.title||"").trim().slice(0,180); if(!title)return deny("Milestone title is required",400);
+        await env.DB.prepare("insert into milestones(id,project_id,title,due_date,status,waiting_on,created_by) values(?,?,?,?,?,?,?)").bind(id,projectId,title,payload?.dueDate||null,"upcoming",["client","studio"].includes(payload?.waitingOn)?payload.waitingOn:null,user.id).run();
+      } else if(type==="tasks") {
+        const title=String(payload?.title||"").trim().slice(0,180); if(!title)return deny("Task title is required",400);
+        await env.DB.prepare("insert into project_tasks(id,project_id,title,assignee_id,due_date,waiting_on_client,created_by) values(?,?,?,?,?,?,?)").bind(id,projectId,title,payload?.assigneeId||null,payload?.dueDate||null,payload?.waitingOnClient?1:0,user.id).run();
+      } else {
+        const title=String(payload?.title||"").trim().slice(0,180); if(!title||!payload?.fileId)return deny("Moodboard title and file are required",400);
+        await env.DB.prepare("insert into moodboards(id,project_id,title,file_id,note,created_by) values(?,?,?,?,?,?)").bind(id,projectId,title,payload.fileId,String(payload?.note||"").trim().slice(0,3000)||null,user.id).run();
+      }
+      await audit(env,user,projectId,"created",type.slice(0,-1),id,{}); return json({id},201);
+    }
+    const reactionMatch=url.pathname.match(/^\/api\/moodboards\/([^/]+)\/reactions$/);
+    if(reactionMatch&&request.method==="POST"){
+      const user=await userFromRequest(request,env);if(!user)return deny("Sign in required");const board=await env.DB.prepare("select project_id from moodboards where id=?").bind(reactionMatch[1]).first();if(!board||!(await canAccessProject(env,user,board.project_id)))return deny("Moodboard not found",404);
+      const payload=await body(request);if(!["love","consider","pass"].includes(payload?.reaction))return deny("Invalid reaction",400);
+      await env.DB.prepare("insert into moodboard_reactions(moodboard_id,user_id,reaction) values(?,?,?) on conflict(moodboard_id,user_id) do update set reaction=excluded.reaction,created_at=current_timestamp").bind(reactionMatch[1],user.id,payload.reaction).run();await audit(env,user,board.project_id,"reacted","moodboard",reactionMatch[1],{reaction:payload.reaction});return json({ok:true});
+    }
     if (deliverableMatch && request.method === "POST") {
       const user = await userFromRequest(request, env); if (!studio(user)) return deny("Studio access required", 403);
       const payload = await body(request); const title = String(payload?.title || "").trim().slice(0, 180);

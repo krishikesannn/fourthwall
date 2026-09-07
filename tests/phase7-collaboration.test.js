@@ -1,0 +1,5 @@
+const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const root=path.resolve(__dirname,'..');
+const schema=fs.readFileSync(path.join(root,'cloudflare/migrations/0008_collaboration.sql'),'utf8');const worker=fs.readFileSync(path.join(root,'cloudflare/src/index.js'),'utf8');const app=fs.readFileSync(path.join(root,'pwa/app.js'),'utf8');
+test('collaboration schema cascades all project records',()=>{for(const table of ['milestones','project_tasks','project_messages','message_reads','moodboards','moodboard_reactions'])assert.match(schema,new RegExp(`table if not exists ${table}`));assert.match(schema,/references projects\(id\) on delete cascade/)});
+test('workspace endpoint checks project membership',()=>{assert.match(worker,/workspaceMatch.*canAccessProject/s);assert.match(worker,/type!=="messages"&&!studio\(user\)/)});
+test('client and studio render collaboration tools',()=>{for(const label of ['PROJECT TIMELINE','MESSAGES','CONCEPT BOARDS','STUDIO TASKS'])assert.match(app,new RegExp(label));assert.match(app,/reactMoodboard/)});
