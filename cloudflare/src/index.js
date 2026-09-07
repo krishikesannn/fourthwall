@@ -169,6 +169,45 @@ export default {
       const rows = await (studio(user) ? (projectId ? env.DB.prepare(sql).bind(projectId) : env.DB.prepare(sql)) : env.DB.prepare(sql).bind(user.id)).all();
       return json({ events: rows.results });
     }
+    if(url.pathname==="/api/operations"&&request.method==="GET"){
+      const user=await userFromRequest(request,env);if(!studio(user))return deny("Studio access required",403);
+      const [contacts,team,templates,leads,announcements]=await Promise.all([
+        env.DB.prepare("select * from client_contacts order by coalesce(renewal_at,'9999'),name").all(),
+        env.DB.prepare("select u.id,u.display_name,u.email,u.role,tp.team_role,tp.active from users u left join team_profiles tp on tp.user_id=u.id where u.role!='client' order by u.display_name").all(),
+        env.DB.prepare("select * from update_templates order by name").all(),
+        env.DB.prepare("select la.*,i.name lead_name,u.display_name author_name from lead_activities la join inquiries i on i.id=la.inquiry_id join users u on u.id=la.created_by order by la.created_at desc limit 100").all(),
+        env.DB.prepare("select * from announcements order by published_at desc limit 50").all()
+      ]);return json({contacts:contacts.results,team:team.results,templates:templates.results,leadActivities:leads.results,announcements:announcements.results});
+    }
+    if(url.pathname==="/api/contacts"&&request.method==="POST"){
+      const user=await userFromRequest(request,env);if(!studio(user))return deny("Studio access required",403);const p=await body(request),name=String(p?.name||"").trim().slice(0,160),email=String(p?.email||"").trim().toLowerCase().slice(0,200);if(!name||!/^\S+@\S+\.\S+$/.test(email))return deny("Name and valid email are required",400);const id=crypto.randomUUID();await env.DB.prepare("insert into client_contacts(id,name,email,phone,company,key_date,renewal_at,notes,created_by) values(?,?,?,?,?,?,?,?,?)").bind(id,name,email,String(p?.phone||"").slice(0,60)||null,String(p?.company||"").slice(0,160)||null,p?.keyDate||null,p?.renewalAt||null,String(p?.notes||"").slice(0,3000)||null,user.id).run();await audit(env,user,null,"created","client_contact",id,{name});return json({id},201);
+    }
+    const leadActivityMatch=url.pathname.match(/^\/api\/inquiries\/([^/]+)\/activities$/);
+    if(leadActivityMatch&&request.method==="POST"){
+      const user=await userFromRequest(request,env);if(!studio(user))return deny("Studio access required",403);const p=await body(request),kind=["note","call","email","follow_up"].includes(p?.kind)?p.kind:"note",note=String(p?.note||"").trim().slice(0,3000);if(!note&&!p?.followUpAt)return deny("Add a note or follow-up date",400);const id=crypto.randomUUID();await env.DB.prepare("insert into lead_activities(id,inquiry_id,kind,note,follow_up_at,created_by) values(?,?,?,?,?,?)").bind(id,leadActivityMatch[1],kind,note||null,p?.followUpAt||null,user.id).run();await audit(env,user,null,"logged","lead_activity",id,{inquiryId:leadActivityMatch[1],kind});return json({id},201);
+    }
+    if(url.pathname==="/api/update-templates"&&request.method==="POST"){
+      const user=await userFromRequest(request,env);if(!studio(user))return deny("Studio access required",403);const p=await body(request),name=String(p?.name||"").trim().slice(0,120),title=String(p?.title||"").trim().slice(0,160),text=String(p?.body||"").trim().slice(0,5000);if(!name||!title||!text)return deny("Name, title and text are required",400);const id=crypto.randomUUID();await env.DB.prepare("insert into update_templates(id,name,title,body,created_by) values(?,?,?,?,?)").bind(id,name,title,text,user.id).run();return json({id},201);
+    }
+    if(url.pathname==="/api/announcements"&&request.method==="GET"){
+      const user=await userFromRequest(request,env);if(!user)return deny("Sign in required");const rows=await env.DB.prepare("select a.*,case when ar.user_id is null then 0 else 1 end is_read from announcements a left join announcement_reads ar on ar.announcement_id=a.id and ar.user_id=? order by a.published_at desc limit 30").bind(user.id).all();return json({announcements:rows.results});
+    }
+    if(url.pathname==="/api/announcements"&&request.method==="POST"){
+      const user=await userFromRequest(request,env);if(!studio(user))return deny("Studio access required",403);const p=await body(request),title=String(p?.title||"").trim().slice(0,160),text=String(p?.body||"").trim().slice(0,5000);if(!title||!text)return deny("Title and message are required",400);const id=crypto.randomUUID();await env.DB.prepare("insert into announcements(id,title,body,created_by) values(?,?,?,?)").bind(id,title,text,user.id).run();await audit(env,user,null,"published","announcement",id,{title});return json({id},201);
+    }
+    if(url.pathname==="/api/settings/notifications"&&request.method==="GET"){
+      const user=await userFromRequest(request,env);if(!user)return deny("Sign in required");const row=await env.DB.prepare("select * from notification_preferences where user_id=?").bind(user.id).first();return json({preferences:row||{email_updates:1,weekly_digest:0,message_alerts:1,approval_alerts:1}});
+    }
+    if(url.pathname==="/api/settings/notifications"&&request.method==="PATCH"){
+      const user=await userFromRequest(request,env);if(!user)return deny("Sign in required");const p=await body(request),v=k=>p?.[k]?1:0;await env.DB.prepare("insert into notification_preferences(user_id,email_updates,weekly_digest,message_alerts,approval_alerts,updated_at) values(?,?,?,?,?,current_timestamp) on conflict(user_id) do update set email_updates=excluded.email_updates,weekly_digest=excluded.weekly_digest,message_alerts=excluded.message_alerts,approval_alerts=excluded.approval_alerts,updated_at=current_timestamp").bind(user.id,v("emailUpdates"),v("weeklyDigest"),v("messageAlerts"),v("approvalAlerts")).run();return json({ok:true});
+    }
+    const onboardingMatch=url.pathname.match(/^\/api\/projects\/([^/]+)\/onboarding$/);
+    if(onboardingMatch&&request.method==="GET"){
+      const user=await userFromRequest(request,env);if(!user||!(await canAccessProject(env,user,onboardingMatch[1])))return deny("Project access required",403);const items=await env.DB.prepare("select * from project_onboarding_items where project_id=? order by sort_order").bind(onboardingMatch[1]).all();const intake=await env.DB.prepare("select * from intake_responses where project_id=? order by submitted_at desc limit 1").bind(onboardingMatch[1]).first();return json({items:items.results,intake});
+    }
+    if(onboardingMatch&&request.method==="POST"){
+      const user=await userFromRequest(request,env);if(!user||!(await canAccessProject(env,user,onboardingMatch[1])))return deny("Project access required",403);const p=await body(request);if(!p?.answers||typeof p.answers!=="object")return deny("Questionnaire answers are required",400);const id=crypto.randomUUID();await env.DB.prepare("insert into intake_responses(id,project_id,user_id,answers) values(?,?,?,?)").bind(id,onboardingMatch[1],user.id,JSON.stringify(p.answers).slice(0,10000)).run();await audit(env,user,onboardingMatch[1],"submitted","intake",id);return json({id},201);
+    }
     if (url.pathname === "/api/inquiries" && request.method === "POST") {
       const payload = await body(request);
       if (!payload || payload.website) return json({ ok: true }, 202);
@@ -216,6 +255,8 @@ export default {
         env.DB.prepare("insert into projects (id,name,service,status,due_date,progress,created_by) values (?,?,?,?,?,?,?)").bind(id, input.name, input.service, input.status, input.dueDate, input.progress, user.id),
         env.DB.prepare("insert into project_members (project_id,user_id,role) values (?,?,?)").bind(id, user.id, "owner")
       ]);
+      const checklist=await env.DB.prepare("select oti.title,oti.sort_order from onboarding_template_items oti join onboarding_templates ot on ot.id=oti.template_id where ot.active=1 order by oti.sort_order").all();
+      if(checklist.results.length)await env.DB.batch(checklist.results.map(item=>env.DB.prepare("insert into project_onboarding_items(id,project_id,title,sort_order) values(?,?,?,?)").bind(crypto.randomUUID(),id,item.title,item.sort_order)));
       await audit(env, user, id, "created", "project", id, { name: input.name });
       return json({ project: { id, ...input } }, 201);
     }
