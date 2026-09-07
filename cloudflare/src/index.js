@@ -298,7 +298,7 @@ export default {
       const user = await userFromRequest(request, env); if (!user || !(await canAccessProject(env, user, projectMatch[1]))) return deny("Project access required", 403);
       const project = await env.DB.prepare("select * from projects where id=?").bind(projectMatch[1]).first();
       if (!project) return deny("Project not found", 404);
-      const deliverables = await env.DB.prepare("select id,title,status,sort_order,approved_at from deliverables where project_id=? order by sort_order,created_at").bind(projectMatch[1]).all();
+      const deliverables = await env.DB.prepare("select id,title,status,sort_order,approver_id,approved_by,approved_at from deliverables where project_id=? order by sort_order,created_at").bind(projectMatch[1]).all();
       return json({ project, deliverables: deliverables.results });
     }
     if (projectMatch && request.method === "PATCH") {
@@ -369,6 +369,21 @@ export default {
       const user=await userFromRequest(request,env);if(!user)return deny("Sign in required");const board=await env.DB.prepare("select project_id from moodboards where id=?").bind(reactionMatch[1]).first();if(!board||!(await canAccessProject(env,user,board.project_id)))return deny("Moodboard not found",404);
       const payload=await body(request);if(!["love","consider","pass"].includes(payload?.reaction))return deny("Invalid reaction",400);
       await env.DB.prepare("insert into moodboard_reactions(moodboard_id,user_id,reaction) values(?,?,?) on conflict(moodboard_id,user_id) do update set reaction=excluded.reaction,created_at=current_timestamp").bind(reactionMatch[1],user.id,payload.reaction).run();await audit(env,user,board.project_id,"reacted","moodboard",reactionMatch[1],{reaction:payload.reaction});return json({ok:true});
+    }
+    const taskMatch=url.pathname.match(/^\/api\/tasks\/([^/]+)$/);
+    if(taskMatch&&request.method==="PATCH"){
+      const user=await userFromRequest(request,env);if(!studio(user))return deny("Studio access required",403);const task=await env.DB.prepare("select project_id from project_tasks where id=?").bind(taskMatch[1]).first();if(!task)return deny("Task not found",404);const p=await body(request),status=["todo","doing","done"].includes(p?.status)?p.status:"todo";await env.DB.prepare("update project_tasks set status=?,assignee_id=?,due_date=?,waiting_on_client=? where id=?").bind(status,p?.assigneeId||null,p?.dueDate||null,p?.waitingOnClient?1:0,taskMatch[1]).run();await audit(env,user,task.project_id,"updated","task",taskMatch[1],{status});return json({ok:true});
+    }
+    const deliverableItemMatch=url.pathname.match(/^\/api\/deliverables\/([^/]+)$/);
+    if(deliverableItemMatch&&request.method==="PATCH"){
+      const user=await userFromRequest(request,env);if(!studio(user))return deny("Studio access required",403);const item=await env.DB.prepare("select project_id from deliverables where id=?").bind(deliverableItemMatch[1]).first();if(!item)return deny("Deliverable not found",404);const p=await body(request),status=["draft","in_review","approved"].includes(p?.status)?p.status:"draft",title=String(p?.title||"").trim().slice(0,180);await env.DB.prepare("update deliverables set title=case when ?='' then title else ? end,status=?,approver_id=?,updated_at=current_timestamp where id=?").bind(title,title,status,p?.approverId||null,deliverableItemMatch[1]).run();await audit(env,user,item.project_id,"updated","deliverable",deliverableItemMatch[1],{status});return json({ok:true});
+    }
+    const permissionMatch=url.pathname.match(/^\/api\/projects\/([^/]+)\/permissions$/);
+    if(permissionMatch&&request.method==="GET"){
+      const user=await userFromRequest(request,env);if(!studio(user))return deny("Studio access required",403);const rows=await env.DB.prepare("select u.id,u.display_name,u.email,tp.team_role,pp.can_edit,pp.can_upload,pp.can_invoice from users u left join team_profiles tp on tp.user_id=u.id left join project_permissions pp on pp.user_id=u.id and pp.project_id=? where u.role!='client' order by u.display_name").bind(permissionMatch[1]).all();return json({members:rows.results});
+    }
+    if(permissionMatch&&request.method==="POST"){
+      const user=await userFromRequest(request,env);if(user?.role!=="admin")return deny("Admin access required",403);const p=await body(request);await env.DB.batch([env.DB.prepare("insert into project_members(project_id,user_id,role) values(?,?,?) on conflict(project_id,user_id) do update set role=excluded.role").bind(permissionMatch[1],p?.userId,"studio_member"),env.DB.prepare("insert into project_permissions(project_id,user_id,can_edit,can_upload,can_invoice) values(?,?,?,?,?) on conflict(project_id,user_id) do update set can_edit=excluded.can_edit,can_upload=excluded.can_upload,can_invoice=excluded.can_invoice").bind(permissionMatch[1],p?.userId,p?.canEdit?1:0,p?.canUpload?1:0,p?.canInvoice?1:0)]);await audit(env,user,permissionMatch[1],"updated","project_permission",p?.userId);return json({ok:true});
     }
     const reviewsMatch=url.pathname.match(/^\/api\/projects\/([^/]+)\/reviews$/);
     if(reviewsMatch&&request.method==="GET"){
@@ -506,14 +521,15 @@ export default {
     }
     if (updateMatch && request.method === "GET") {
       const user = await userFromRequest(request, env); if (!user || !(await canAccessProject(env, user, updateMatch[1]))) return deny("Project access required", 403);
-      const sql = studio(user) ? "select * from project_updates where project_id=? order by created_at desc" : "select * from project_updates where project_id=? and visible_to_client=1 order by created_at desc";
+      const sql = studio(user) ? "select pu.*,pf.file_name attachment_name from project_updates pu left join project_files pf on pf.id=pu.attachment_file_id where pu.project_id=? order by pu.created_at desc" : "select pu.*,pf.file_name attachment_name from project_updates pu left join project_files pf on pf.id=pu.attachment_file_id where pu.project_id=? and pu.visible_to_client=1 and (pu.scheduled_at is null or pu.scheduled_at<=current_timestamp) order by pu.created_at desc";
       const rows = await env.DB.prepare(sql).bind(updateMatch[1]).all(); return json({ updates: rows.results });
     }
     if (updateMatch && request.method === "POST") {
       const user = await userFromRequest(request, env); if (!studio(user)) return deny("Studio access required", 403);
       const payload = await body(request); const title = String(payload?.title || "Studio update").trim().slice(0, 160); const text = String(payload?.body || "").trim().slice(0, 5000);
       if (!text) return deny("Update text is required", 400);
-      const id = crypto.randomUUID(); await env.DB.prepare("insert into project_updates (id,project_id,title,body,visible_to_client,requires_approval,created_by) values (?,?,?,?,?,?,?)").bind(id, updateMatch[1], title, text, payload?.visibleToClient === false ? 0 : 1, payload?.requiresApproval ? 1 : 0, user.id).run();
+      if(payload?.attachmentFileId){const file=await env.DB.prepare("select 1 from project_files where id=? and project_id=?").bind(payload.attachmentFileId,updateMatch[1]).first();if(!file)return deny("Attachment not found",404)}
+      const id = crypto.randomUUID(); await env.DB.prepare("insert into project_updates (id,project_id,title,body,visible_to_client,requires_approval,created_by,attachment_file_id,scheduled_at) values (?,?,?,?,?,?,?,?,?)").bind(id, updateMatch[1], title, text, payload?.visibleToClient === false ? 0 : 1, payload?.requiresApproval ? 1 : 0, user.id,payload?.attachmentFileId||null,payload?.scheduledAt||null).run();
       await audit(env, user, updateMatch[1], "posted", "project_update", id, { title, visibleToClient: payload?.visibleToClient !== false });
       return json({ update: { id, title, body: text } }, 201);
     }

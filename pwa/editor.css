@@ -23,4 +23,9 @@ input[type="file"] { width: 100%; }
 .token span { flex: 1; text-align: left; }
 .calendar-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 10px; }
 .calendar-grid p { color: var(--muted); line-height: 1.5; }
+.project-switcher { max-width: 150px; min-height: 44px; padding: 8px; }
+.pipeline { display: grid; grid-template-columns: repeat(4,minmax(190px,1fr)); gap: 10px; overflow-x: auto; padding-bottom: 8px; }
+.pipeline-stage { min-height: 260px; padding: 10px; border: 1px dashed var(--line); border-radius: 12px; }
+.pipeline-stage > .card { margin-bottom: 9px; }
+.pipeline-modal { width: min(1100px,94vw); }
 @media (max-width: 390px) { .form-split { grid-template-columns: 1fr; } }
