@@ -39,6 +39,10 @@ function storageHeaders(env, mimeType) {
   return { authorization: `Bearer ${env.SUPABASE_SECRET_KEY}`, apikey: env.SUPABASE_SECRET_KEY, ...(mimeType ? { "content-type": mimeType } : {}) };
 }
 function storageReady(env) { return env.SUPABASE_URL && env.SUPABASE_SECRET_KEY && env.SUPABASE_STORAGE_BUCKET; }
+async function audit(env, user, projectId, action, entityType, entityId, details = {}) {
+  await env.DB.prepare("insert into audit_events (id,actor_id,project_id,action,entity_type,entity_id,details) values (?,?,?,?,?,?,?)")
+    .bind(crypto.randomUUID(), user?.id || null, projectId || null, action, entityType, entityId || null, JSON.stringify(details).slice(0, 5000)).run();
+}
 function projectInput(payload) {
   const name = String(payload?.name || "").trim().slice(0, 160);
   const service = String(payload?.service || "").trim().slice(0, 160);
@@ -139,6 +143,32 @@ export default {
     if (url.pathname === "/api/auth/me" && request.method === "GET") {
       const user = await userFromRequest(request, env); return user ? json({ user }) : deny("Sign in required");
     }
+    if (url.pathname === "/api/search" && request.method === "GET") {
+      const user = await userFromRequest(request, env); if (!user) return deny("Sign in required");
+      const term = `%${String(url.searchParams.get("q") || "").trim().slice(0, 100)}%`;
+      if (term === "%%") return json({ results: [] });
+      const projectScope = studio(user) ? "" : " and p.id in (select project_id from project_members where user_id=?)";
+      const projectQuery = env.DB.prepare(`select p.id,p.name title,p.service subtitle,'project' type,p.id project_id from projects p where (p.name like ? or p.service like ?)${projectScope} limit 20`);
+      const projects = await (studio(user) ? projectQuery.bind(term, term) : projectQuery.bind(term, term, user.id)).all();
+      const fileQuery = env.DB.prepare(`select pf.id,pf.file_name title,p.name subtitle,'file' type,pf.project_id from project_files pf join projects p on p.id=pf.project_id where pf.file_name like ?${projectScope} limit 20`);
+      const files = await (studio(user) ? fileQuery.bind(term) : fileQuery.bind(term, user.id)).all();
+      let results = [...projects.results, ...files.results];
+      if (studio(user)) {
+        const leads = await env.DB.prepare("select id,name title,coalesce(company,email) subtitle,'lead' type,null project_id from inquiries where name like ? or company like ? or email like ? limit 20").bind(term, term, term).all();
+        results.push(...leads.results);
+      }
+      return json({ results: results.slice(0, 40) });
+    }
+    if (url.pathname === "/api/audit" && request.method === "GET") {
+      const user = await userFromRequest(request, env); if (!user) return deny("Sign in required");
+      const projectId = url.searchParams.get("projectId");
+      if (projectId && !(await canAccessProject(env, user, projectId))) return deny("Project access required", 403);
+      const sql = studio(user)
+        ? `select ae.*,u.display_name actor_name from audit_events ae left join users u on u.id=ae.actor_id ${projectId ? "where ae.project_id=?" : ""} order by ae.created_at desc limit 100`
+        : "select ae.*,u.display_name actor_name from audit_events ae left join users u on u.id=ae.actor_id where ae.project_id in (select project_id from project_members where user_id=?) order by ae.created_at desc limit 100";
+      const rows = await (studio(user) ? (projectId ? env.DB.prepare(sql).bind(projectId) : env.DB.prepare(sql)) : env.DB.prepare(sql).bind(user.id)).all();
+      return json({ events: rows.results });
+    }
     if (url.pathname === "/api/inquiries" && request.method === "POST") {
       const payload = await body(request);
       if (!payload || payload.website) return json({ ok: true }, 202);
@@ -186,6 +216,7 @@ export default {
         env.DB.prepare("insert into projects (id,name,service,status,due_date,progress,created_by) values (?,?,?,?,?,?,?)").bind(id, input.name, input.service, input.status, input.dueDate, input.progress, user.id),
         env.DB.prepare("insert into project_members (project_id,user_id,role) values (?,?,?)").bind(id, user.id, "owner")
       ]);
+      await audit(env, user, id, "created", "project", id, { name: input.name });
       return json({ project: { id, ...input } }, 201);
     }
     const projectMatch = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
@@ -201,6 +232,7 @@ export default {
       const input = projectInput(await body(request));
       if (!input.name || !input.service) return deny("Project name and service are required", 400);
       const result = await env.DB.prepare("update projects set name=?,service=?,status=?,due_date=?,progress=?,updated_at=current_timestamp where id=?").bind(input.name, input.service, input.status, input.dueDate, input.progress, projectMatch[1]).run();
+      if (result.meta.changes) await audit(env, user, projectMatch[1], "updated", "project", projectMatch[1], input);
       return result.meta.changes ? json({ project: { id: projectMatch[1], ...input } }) : deny("Project not found", 404);
     }
     const clientAccessMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/client-access$/);
@@ -232,6 +264,7 @@ export default {
       if (!title) return deny("Deliverable title is required", 400);
       const id = crypto.randomUUID();
       await env.DB.prepare("insert into deliverables (id,project_id,title,status,sort_order) values (?,?,?,?,?)").bind(id, deliverableMatch[1], title, "draft", Number(payload?.sortOrder) || 0).run();
+      await audit(env, user, deliverableMatch[1], "created", "deliverable", id, { title });
       return json({ deliverable: { id, title, status: "draft" } }, 201);
     }
     const filesMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/files$/);
@@ -266,6 +299,7 @@ export default {
       } catch (error) {
         await fetch(endpoint, { method: "DELETE", headers: storageHeaders(env) }); throw error;
       }
+      await audit(env, user, filesMatch[1], "uploaded", "file", id, { fileName, version, deliverableId });
       return json({ file: { id, projectId: filesMatch[1], deliverableId, fileName, mimeType, sizeBytes: bytes.byteLength, version } }, 201);
     }
     const assetsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/brand-assets$/);
@@ -293,6 +327,7 @@ export default {
         env.DB.prepare("update brand_assets set is_latest=0,archived_at=coalesce(archived_at,current_timestamp) where project_id=? and kind=? and lower(name)=lower(?) and is_latest=1").bind(assetsMatch[1], kind, name),
         env.DB.prepare("insert into brand_assets (id,project_id,file_id,kind,name,token_value,version,created_by) values (?,?,?,?,?,?,?,?)").bind(id, assetsMatch[1], fileId, kind, name, tokenValue, version, user.id)
       ]);
+      await audit(env, user, assetsMatch[1], "published", "brand_asset", id, { kind, name, version });
       return json({ asset: { id, kind, name, tokenValue, fileId, version, isLatest: true } }, 201);
     }
     const fileDownloadMatch = url.pathname.match(/^\/api\/files\/([^/]+)\/download$/);
@@ -327,6 +362,7 @@ export default {
         env.DB.prepare("insert into deliverable_approvals (id,project_id,deliverable_id,decision,note,typed_signature,decided_by) values (?,?,?,?,?,?,?)").bind(id, deliverable.project_id, approvalMatch[1], decision, note, signature, user.id),
         env.DB.prepare("update deliverables set status=?,approved_by=?,approved_at=case when ?='approved' then current_timestamp else null end,updated_at=current_timestamp where id=?").bind(decision === "approved" ? "approved" : "in_review", decision === "approved" ? user.id : null, decision, approvalMatch[1])
       ]);
+      await audit(env, user, deliverable.project_id, decision, "deliverable", approvalMatch[1], { note, typedSignature: Boolean(signature) });
       return json({ approval: { id, decision, note, typedSignature: signature } }, 201);
     }
     if (updateMatch && request.method === "GET") {
@@ -339,6 +375,7 @@ export default {
       const payload = await body(request); const title = String(payload?.title || "Studio update").trim().slice(0, 160); const text = String(payload?.body || "").trim().slice(0, 5000);
       if (!text) return deny("Update text is required", 400);
       const id = crypto.randomUUID(); await env.DB.prepare("insert into project_updates (id,project_id,title,body,visible_to_client,requires_approval,created_by) values (?,?,?,?,?,?,?)").bind(id, updateMatch[1], title, text, payload?.visibleToClient === false ? 0 : 1, payload?.requiresApproval ? 1 : 0, user.id).run();
+      await audit(env, user, updateMatch[1], "posted", "project_update", id, { title, visibleToClient: payload?.visibleToClient !== false });
       return json({ update: { id, title, body: text } }, 201);
     }
     return deny("Not found", 404);
