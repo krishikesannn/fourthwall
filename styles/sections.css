@@ -1261,11 +1261,14 @@
 
 @media (max-width: 480px) {
   .work-scatter__cluster {
-    grid-template-columns: repeat(2, 1fr);
+    /* Give each portfolio visual the full phone width instead of thumbnail scale. */
+    grid-template-columns: 1fr;
+    gap: 1.15rem;
   }
 
   .work-scatter__item--center {
-    grid-column: span 2;
+    grid-column: auto;
+    aspect-ratio: 4 / 3;
   }
 }
 

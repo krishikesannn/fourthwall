@@ -316,15 +316,15 @@ This artboard keeps exactly that shape and fills the page.
     aspect-ratio: auto;
 
     padding:
-      30px
+      20px
       18px
-      60px;
+      36px;
 
     display: flex;
 
     flex-direction: column;
 
-    gap: 20px;
+    gap: 10px;
 
     overflow: visible;
   }
@@ -364,7 +364,11 @@ This artboard keeps exactly that shape and fills the page.
   /* Intro remains smaller */
 
   .intro-note {
-    width: 72%;
+    /* This transparent PNG includes generous desktop breathing room. Pull its
+       invisible canvas in on phones so the next service starts sooner. */
+    width: 62%;
+    margin-top: -2.5rem;
+    margin-bottom: -5.25rem;
 
     align-self: flex-start;
   }
@@ -373,37 +377,37 @@ This artboard keeps exactly that shape and fills the page.
   /* service blocks */
 
   .branding-card {
-    width: 92%;
+    width: 100%;
 
     align-self: flex-end;
   }
 
   .marketing-card {
-    width: 92%;
+    width: 100%;
 
     align-self: flex-start;
   }
 
   .marketing-photo {
-    width: 86%;
+    width: 96%;
 
     align-self: center;
   }
 
   .website-card {
-    width: 92%;
+    width: 100%;
 
     align-self: flex-end;
   }
 
   .ai-card {
-    width: 94%;
+    width: 100%;
 
     align-self: flex-start;
   }
 
   .ai-photo {
-    width: 88%;
+    width: 96%;
 
     align-self: center;
   }

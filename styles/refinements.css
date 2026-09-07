@@ -572,6 +572,29 @@ body {
   }
 }
 
+@media (max-width: 700px) {
+  /* The case-study hero was still retaining its desktop two-column split,
+     which left the work image too small on a phone. */
+  .harsha-hero {
+    padding-top: 1.25rem;
+    padding-bottom: 2.5rem;
+  }
+
+  .harsha-hero__grid {
+    grid-template-columns: 1fr;
+    gap: 1.4rem;
+  }
+
+  .harsha-hero__title {
+    font-size: clamp(3.1rem, 15vw, 4.5rem);
+  }
+
+  .harsha-hero__visual,
+  .harsha-hero__main-img {
+    width: 100%;
+  }
+}
+
 .harsha-hero__accent-img {
   width: 100%;
   display: block;
