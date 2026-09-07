@@ -45,6 +45,40 @@ function clientAccessInput(payload) {
   const code = String(payload?.code || "").trim();
   return { email, displayName, code };
 }
+
+function escapeEmailHtml(value) {
+  return String(value || "").replace(/[&<>\"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[character]));
+}
+
+// Notification delivery is intentionally best-effort: a temporary email-provider
+// problem must never prevent a genuine lead from being saved in D1.
+async function notifyStudioOfInquiry(env, inquiry) {
+  if (!env.RESEND_API_KEY || !env.INQUIRY_NOTIFICATION_TO || !env.INQUIRY_FROM_EMAIL) return;
+  const lines = [
+    ["Name", inquiry.name], ["Email", inquiry.email], ["Phone", inquiry.phone || "Not provided"],
+    ["Company", inquiry.company || "Not provided"], ["Service", inquiry.service || "General inquiry"],
+    ["Project details", inquiry.details]
+  ];
+  const text = lines.map(([label, value]) => `${label}: ${value}`).join("\n\n");
+  const html = lines.map(([label, value]) => `<p><strong>${escapeEmailHtml(label)}:</strong><br>${escapeEmailHtml(value).replace(/\n/g, "<br>")}</p>`).join("");
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        from: env.INQUIRY_FROM_EMAIL,
+        to: [env.INQUIRY_NOTIFICATION_TO],
+        reply_to: inquiry.email,
+        subject: `New website inquiry — ${inquiry.name}`,
+        text,
+        html: `<h1>New website inquiry</h1>${html}`
+      })
+    });
+    if (!response.ok) console.error("Inquiry email notification failed", response.status, await response.text());
+  } catch (error) {
+    console.error("Inquiry email notification failed", error instanceof Error ? error.message : String(error));
+  }
+}
 async function createSession(env, userId) {
   const token = random();
   const expires = new Date(Date.now() + 7 * 86400000).toISOString();
@@ -104,8 +138,15 @@ export default {
       const email = String(payload.email || "").trim().toLowerCase().slice(0, 200);
       const details = String(payload.details || "").trim().slice(0, 5000);
       if (!name || !/^\S+@\S+\.\S+$/.test(email) || !details) return deny("Please provide your name, a valid email, and project details.", 400);
+      const inquiry = {
+        id: crypto.randomUUID(), name, email, details,
+        phone: String(payload.phone || "").trim().slice(0, 60),
+        company: String(payload.company || "").trim().slice(0, 160),
+        service: String(payload.service || "").trim().slice(0, 160)
+      };
       await env.DB.prepare("insert into inquiries (id,name,email,phone,company,service,details) values (?,?,?,?,?,?,?)")
-        .bind(crypto.randomUUID(), name, email, String(payload.phone || "").trim().slice(0, 60), String(payload.company || "").trim().slice(0, 160), String(payload.service || "").trim().slice(0, 160), details).run();
+        .bind(inquiry.id, inquiry.name, inquiry.email, inquiry.phone, inquiry.company, inquiry.service, inquiry.details).run();
+      await notifyStudioOfInquiry(env, inquiry);
       return json({ ok: true, message: "Inquiry received." }, 201);
     }
     if (url.pathname === "/api/inquiries" && request.method === "GET") {

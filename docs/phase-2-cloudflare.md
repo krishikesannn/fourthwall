@@ -10,3 +10,13 @@ The free deployment path uses Cloudflare Pages for the PWA and Worker, D1 for re
 4. Call `POST /api/auth/bootstrap` exactly once, with the bootstrap secret, to create the studio owner.
 
 The bootstrap route is unavailable after the first user exists. Never put the bootstrap secret in the PWA or Android client.
+
+## Inquiry email notifications
+
+The Worker saves every valid inquiry to D1 first, then sends a best-effort notification through Resend. To activate it, verify a sending domain in Resend and add these Cloudflare Worker secrets:
+
+1. `RESEND_API_KEY` — a Resend API key with sending permission.
+2. `INQUIRY_NOTIFICATION_TO` — `thefourthwall04.co@gmail.com`.
+3. `INQUIRY_FROM_EMAIL` — for example `The Fourth Wall <inquiries@your-verified-domain.com>`.
+
+The sender domain must be verified by Resend. The email's Reply-To address is automatically set to the person who submitted the inquiry.
