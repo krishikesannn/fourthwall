@@ -91,6 +91,17 @@ async function notifyStudioOfInquiry(env, inquiry) {
     console.error("Inquiry email notification failed", error instanceof Error ? error.message : String(error));
   }
 }
+async function sendWeeklyDigests(env){
+  if(!env.RESEND_API_KEY||!env.INQUIRY_FROM_EMAIL)return;
+  const users=await env.DB.prepare("select u.id,u.email,u.display_name from notification_preferences np join users u on u.id=np.user_id where np.weekly_digest=1").all();
+  for(const user of users.results){
+    const projects=await env.DB.prepare("select p.id,p.name,p.progress,p.status from projects p join project_members pm on pm.project_id=p.id where pm.user_id=? and p.status!='complete'").bind(user.id).all();
+    const updates=await env.DB.prepare("select pu.title,p.name project_name from project_updates pu join projects p on p.id=pu.project_id join project_members pm on pm.project_id=p.id where pm.user_id=? and pu.visible_to_client=1 and pu.created_at>=datetime('now','-7 days') order by pu.created_at desc limit 20").bind(user.id).all();
+    const text=[`Hello ${user.display_name},`,`Your weekly Fourth Wall digest`,...projects.results.map(p=>`${p.name}: ${p.progress}% complete (${p.status})`),...updates.results.map(u=>`${u.project_name}: ${u.title}`)].join("\n\n");
+    const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{authorization:`Bearer ${env.RESEND_API_KEY}`,"content-type":"application/json"},body:JSON.stringify({from:env.INQUIRY_FROM_EMAIL,to:[user.email],subject:"Your weekly Fourth Wall project digest",text})});
+    if(!response.ok)console.error("Weekly digest failed",user.id,response.status);
+  }
+}
 async function createSession(env, userId) {
   const token = random();
   const expires = new Date(Date.now() + 7 * 86400000).toISOString();
@@ -534,5 +545,6 @@ export default {
       return json({ update: { id, title, body: text } }, 201);
     }
     return deny("Not found", 404);
-  }
+  },
+  async scheduled(_event,env,ctx){ctx.waitUntil(sendWeeklyDigests(env));}
 };
