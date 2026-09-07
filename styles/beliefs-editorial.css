@@ -253,6 +253,59 @@
     width: 100%;
     max-width: 620px;
     margin: 0 auto;
+    min-height: 10.5rem;
+    display: flex;
+    align-items: center;
+    padding: 1.35rem 1.2rem;
+    overflow: hidden;
+    isolation: isolate;
+    background: #faf7f2;
+    border: 1px solid rgba(14, 56, 50, 0.12);
+    border-radius: 0.55rem;
+    box-shadow: 0 0.6rem 1.4rem rgba(30, 40, 39, 0.08);
+  }
+
+  /* The desktop paper strips are deliberately shallow. On a phone they cannot
+     hold a heading and paragraph, so each principle becomes a calm full card. */
+  .belief-banner-bg {
+    display: none;
+  }
+
+  .belief-banner-content,
+  .banner--01 .belief-banner-content {
+    position: relative;
+    inset: auto;
+    transform: none;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 2.9rem 1px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 0.9rem;
+  }
+
+  .belief-banner-num {
+    min-width: 0;
+    font-size: 2.25rem;
+  }
+
+  .belief-banner-divider {
+    width: 1px;
+    height: 4.75rem;
+    margin: 0;
+  }
+
+  .belief-banner-text {
+    gap: 0.3rem;
+  }
+
+  .belief-banner-title {
+    font-size: clamp(1.45rem, 6.4vw, 1.8rem);
+    line-height: 1.06;
+  }
+
+  .belief-banner-desc {
+    font-size: 0.92rem;
+    line-height: 1.45;
   }
 
   .belief-botanical--olive {
@@ -270,6 +323,29 @@
   }
 
   .beliefs-artboard {
-    gap: 0.4rem;
+    gap: 0.8rem;
+  }
+
+  .belief-banner-item {
+    min-height: 11.25rem;
+    padding: 1.2rem 1rem;
+  }
+
+  .belief-banner-content,
+  .banner--01 .belief-banner-content {
+    grid-template-columns: 2.45rem 1px minmax(0, 1fr);
+    column-gap: 0.7rem;
+  }
+
+  .belief-banner-num {
+    font-size: 1.95rem;
+  }
+
+  .belief-banner-divider {
+    height: 5.25rem;
+  }
+
+  .belief-banner-desc {
+    font-size: 0.88rem;
   }
 }

@@ -1554,8 +1554,19 @@ body {
 
 @media (max-width: 640px) {
   .closer-look-cluster-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
+    /* Full-width work cards let the visual detail breathe on a phone. */
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .closer-look-cluster-grid .closer-look-item__image {
+    aspect-ratio: 4 / 3;
+    border-radius: 16px;
+  }
+
+  .closer-look-cluster-grid .closer-look-item__title {
+    font-size: 1.15rem;
+    margin-top: 0.55rem;
   }
 }
 
