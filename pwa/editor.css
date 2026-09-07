@@ -15,4 +15,10 @@
 .deliverable small { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; letter-spacing: .08em; }
 .deliverable .actions { grid-template-columns: 1fr; }
 input[type="file"] { width: 100%; }
+.asset-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit,minmax(170px,1fr)); }
+.asset-card { display: grid; gap: 12px; align-content: start; }
+.asset-card h3 { margin: 0; font-family: 'Playfair Display',serif; }
+.token { min-height: 44px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font-size: 10px; font-weight: 700; }
+.token i { width: 24px; height: 24px; border-radius: 50%; background: var(--token); border: 1px solid var(--line); }
+.token span { flex: 1; text-align: left; }
 @media (max-width: 390px) { .form-split { grid-template-columns: 1fr; } }

@@ -268,6 +268,33 @@ export default {
       }
       return json({ file: { id, projectId: filesMatch[1], deliverableId, fileName, mimeType, sizeBytes: bytes.byteLength, version } }, 201);
     }
+    const assetsMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/brand-assets$/);
+    if (assetsMatch && request.method === "GET") {
+      const user = await userFromRequest(request, env); if (!user || !(await canAccessProject(env, user, assetsMatch[1]))) return deny("Project access required", 403);
+      const archive = url.searchParams.get("archive") === "1";
+      const rows = await env.DB.prepare(`select ba.id,ba.kind,ba.name,ba.token_value,ba.version,ba.is_latest,ba.archived_at,ba.created_at,pf.id file_id,pf.file_name,pf.mime_type,pf.size_bytes from brand_assets ba left join project_files pf on pf.id=ba.file_id where ba.project_id=? and ${archive ? "ba.archived_at is not null" : "ba.is_latest=1 and ba.archived_at is null"} order by ba.kind,ba.name,ba.version desc`).bind(assetsMatch[1]).all();
+      return json({ assets: rows.results });
+    }
+    if (assetsMatch && request.method === "POST") {
+      const user = await userFromRequest(request, env); if (!studio(user)) return deny("Studio access required", 403);
+      const payload = await body(request), kind = payload?.kind;
+      const name = String(payload?.name || "").trim().slice(0, 160), tokenValue = String(payload?.tokenValue || "").trim().slice(0, 500) || null;
+      if (!["logo", "font", "color", "template"].includes(kind) || !name) return deny("Asset name and valid type are required", 400);
+      const fileId = payload?.fileId || null;
+      if (kind !== "color" && !fileId) return deny("Upload a file for this asset", 400);
+      if (kind === "color" && !tokenValue) return deny("Add a colour token value", 400);
+      if (fileId) {
+        const file = await env.DB.prepare("select 1 from project_files where id=? and project_id=?").bind(fileId, assetsMatch[1]).first();
+        if (!file) return deny("Project file not found", 404);
+      }
+      const previous = await env.DB.prepare("select coalesce(max(version),0) version from brand_assets where project_id=? and kind=? and lower(name)=lower(?)").bind(assetsMatch[1], kind, name).first();
+      const id = crypto.randomUUID(), version = Number(previous?.version || 0) + 1;
+      await env.DB.batch([
+        env.DB.prepare("update brand_assets set is_latest=0,archived_at=coalesce(archived_at,current_timestamp) where project_id=? and kind=? and lower(name)=lower(?) and is_latest=1").bind(assetsMatch[1], kind, name),
+        env.DB.prepare("insert into brand_assets (id,project_id,file_id,kind,name,token_value,version,created_by) values (?,?,?,?,?,?,?,?)").bind(id, assetsMatch[1], fileId, kind, name, tokenValue, version, user.id)
+      ]);
+      return json({ asset: { id, kind, name, tokenValue, fileId, version, isLatest: true } }, 201);
+    }
     const fileDownloadMatch = url.pathname.match(/^\/api\/files\/([^/]+)\/download$/);
     if (fileDownloadMatch && request.method === "GET") {
       const user = await userFromRequest(request, env); if (!user) return deny("Sign in required");
