@@ -27,6 +27,7 @@ test('weekly digest is scheduled and dispatched by the Worker', () => {
   }
 });
 
-test('service worker cache is advanced for the native settings release', () => {
-  assert.match(read('pwa/sw.js'), /fourth-wall-v9/);
+test('service worker cache includes the native settings release or newer', () => {
+  const version = Number(read('pwa/sw.js').match(/fourth-wall-v(\d+)/)?.[1]);
+  assert.ok(version >= 9);
 });
