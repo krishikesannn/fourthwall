@@ -260,6 +260,7 @@ const mapProject = (
   proposals: workspace.proposals || [],
   meetings: workspace.meetings || [],
   providers: workspace.providers || {},
+  teamMembers: workspace.teamMembers || [],
 });
 const mapLead = (l) => ({
   id: l.id,
@@ -749,23 +750,34 @@ projects = function () {
 };
 async function openProject(id) {
   try {
-    const [detail, updates, files, assets, workspace, reviews, calendar, insights, commercial] =
-      await Promise.all([
-        live(`/projects/${id}`),
-        live(`/projects/${id}/updates`),
-        live(`/projects/${id}/files`),
-        live(`/projects/${id}/brand-assets`),
-        live(`/projects/${id}/workspace`),
-        live(`/projects/${id}/reviews`),
-        live(`/projects/${id}/content-posts`),
-        live(`/projects/${id}/insights`),
-        live(`/projects/${id}/commercial`).catch(() => ({
-          invoices: [],
-          proposals: [],
-          meetings: [],
-          providers: {},
-        })),
-      ]);
+    const [
+      detail,
+      updates,
+      files,
+      assets,
+      workspace,
+      reviews,
+      calendar,
+      insights,
+      commercial,
+      permissions,
+    ] = await Promise.all([
+      live(`/projects/${id}`),
+      live(`/projects/${id}/updates`),
+      live(`/projects/${id}/files`),
+      live(`/projects/${id}/brand-assets`),
+      live(`/projects/${id}/workspace`),
+      live(`/projects/${id}/reviews`),
+      live(`/projects/${id}/content-posts`),
+      live(`/projects/${id}/insights`),
+      live(`/projects/${id}/commercial`).catch(() => ({
+        invoices: [],
+        proposals: [],
+        meetings: [],
+        providers: {},
+      })),
+      live(`/projects/${id}/permissions`),
+    ]);
     projectEditor(
       mapProject(detail.project, detail.deliverables, updates.updates, files.files, assets.assets, {
         ...workspace,
@@ -773,6 +785,7 @@ async function openProject(id) {
         posts: calendar.posts,
         ...insights,
         ...commercial,
+        teamMembers: permissions.members,
       }),
     );
   } catch (reason) {
@@ -879,11 +892,23 @@ const renderClientWithAssets = client;
 client = function (project) {
   renderClientWithAssets(project);
   $(".screen").insertAdjacentHTML("beforeend", collaborationView(project, false));
+  [...document.querySelectorAll("button")]
+    .find((button) => button.textContent.includes("MESSAGE THE STUDIO"))
+    ?.remove();
 };
 const renderEditorWithAssets = projectEditor;
 projectEditor = function (project) {
   renderEditorWithAssets(project);
   $(".screen").insertAdjacentHTML("beforeend", collaborationView(project, true));
+  const taskForm = document.querySelector("form[onsubmit*=\"'tasks'\"]");
+  if (taskForm && project.teamMembers.length) {
+    taskForm
+      .querySelector(".form-split")
+      .insertAdjacentHTML(
+        "afterbegin",
+        `<select name="assigneeId" aria-label="Task assignee"><option value="">Unassigned</option>${project.teamMembers.map((member) => `<option value="${esc(member.id)}">${esc(member.display_name)} · ${esc(member.team_role || member.role)}</option>`).join("")}</select>`,
+      );
+  }
 };
 async function createCollaboration(event, projectId, type) {
   event.preventDefault();
