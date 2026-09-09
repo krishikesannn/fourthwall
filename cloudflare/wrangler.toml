@@ -3,6 +3,13 @@ main = "src/index.js"
 compatibility_date = "2026-09-06"
 workers_dev = true
 
+[vars]
+SUPABASE_URL = "https://ltcbqxkyvjumjqzephbh.supabase.co"
+SUPABASE_STORAGE_BUCKET = "project-files"
+PUBLIC_APP_URL = "https://fourthwall.pages.dev/pwa/"
+INQUIRY_NOTIFICATION_TO = "thefourthwall04.co@gmail.com"
+DROPBOX_SIGN_TEST_MODE = "true"
+
 [triggers]
 crons = ["0 4 * * 1"]
 
