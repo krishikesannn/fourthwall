@@ -30,3 +30,4 @@ input[type="file"] { width: 100%; }
 .pipeline-modal { width: min(1100px,94vw); }
 @media (max-width: 390px) { .form-split { grid-template-columns: 1fr; } }
 .review-reply{margin-left:clamp(1rem,5vw,3rem);border-left:3px solid var(--gold)}
+.approval-history{display:grid;gap:.35rem;margin-top:.7rem;padding-top:.7rem;border-top:1px solid var(--line)}

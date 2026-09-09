@@ -357,7 +357,8 @@ export default {
       const project = await env.DB.prepare("select * from projects where id=?").bind(projectMatch[1]).first();
       if (!project) return deny("Project not found", 404);
       const deliverables = await env.DB.prepare("select id,title,status,sort_order,approver_id,approved_by,approved_at from deliverables where project_id=? order by sort_order,created_at").bind(projectMatch[1]).all();
-      return json({ project, deliverables: deliverables.results });
+      const approvals = await env.DB.prepare("select da.id,da.deliverable_id,da.decision,da.note,da.typed_signature,da.created_at,u.display_name decided_by from deliverable_approvals da join users u on u.id=da.decided_by where da.project_id=? order by da.created_at desc").bind(projectMatch[1]).all();
+      return json({ project, deliverables: deliverables.results.map(item=>({...item,approval_history:approvals.results.filter(entry=>entry.deliverable_id===item.id)})) });
     }
     if (projectMatch && request.method === "PATCH") {
       const user = await userFromRequest(request, env); if (!studio(user)) return deny("Studio access required", 403);
