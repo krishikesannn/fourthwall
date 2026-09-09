@@ -16,6 +16,6 @@ test('search scopes client results through project membership',()=>{
 });
 test('offline JSON mutations queue and sync when connectivity returns',()=>{
   assert.match(app,/tfw-offline-queue/);
-  assert.match(app,/addEventListener\('online',syncOfflineQueue\)/);
+  assert.match(app,/addEventListener\(["']online["'],\s*syncOfflineQueue\)/);
   assert.match(app,/GLOBAL SEARCH/);
 });

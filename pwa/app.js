@@ -1,96 +1,1350 @@
 /* Local-first PWA: all agency data is persisted in this browser. */
-const $=s=>document.querySelector(s),app=$('#app');let mode='client',view='overview',data;const editorSheet=document.createElement('link');editorSheet.rel='stylesheet';editorSheet.href='editor.css';document.head.append(editorSheet);
-const seed={studio:{email:'hello@thefourthwall.com',password:'fourthwall'},client:{email:'client@harshalucknowi.com',code:'HARSHALIVE'},projects:[{id:1,name:'HarshaLucknowi',service:'Brand identity & social media',status:'Active',due:'30 Sep 2026',progress:68,client:'client@harshalucknowi.com',code:'HARSHALIVE',deliverables:['Brand identity system','September social campaign','Website design direction'],updates:[{date:'02 SEP',title:'Social campaign is in review',text:'The next set of campaign visuals is ready for your feedback.',approval:true},{date:'28 AUG',title:'Identity system approved',text:'Core brand assets have been finalised and organised.'}]}],leads:[{id:1,name:'Anika Rao',company:'Saffron House',service:'Brand identity',email:'anika@saffron.in',status:'New'},{id:2,name:'Karan Mehta',company:'North Studio',service:'Website',email:'karan@north.studio',status:'Contacted'}],theme:'light'};
-function load(){data=JSON.parse(localStorage.getItem('tfw-pwa')||'null')||structuredClone(seed);document.body.classList.toggle('dark',data.theme==='dark')}function save(){localStorage.setItem('tfw-pwa',JSON.stringify(data))}const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),2400)}
-function login(){app.innerHTML=`<main class="screen login"><div class="mark">◫ THE FOURTH WALL</div><span class="eyebrow">EDITORIAL STUDIO APP</span><h1>Your work,<br>within reach.</h1><p class="muted">A quiet space for beautiful work in progress.</p><div class="switch"><button class="${mode==='client'?'on':''}" data-mode="client">Client Space</button><button class="${mode==='studio'?'on':''}" data-mode="studio">Studio Desk</button></div><form id="loginForm">${mode==='client'?`<label>Email<input name="email" type="email" required placeholder="you@yourbrand.com"></label><label>Project access code<input name="code" required placeholder="Provided by your studio"></label>`:`<label>Studio email<input name="email" type="email" required placeholder="hello@thefourthwall.com"></label><label>Password<input name="password" type="password" required placeholder="••••••••"></label>`}<p class="error" id="error"></p><button class="btn">${mode==='client'?'VIEW MY PROJECT':'ENTER STUDIO DESK'} →</button></form><p class="hint">${mode==='client'?'Demo: client@harshalucknowi.com / HARSHALIVE':'Demo: hello@thefourthwall.com / fourthwall'}</p></main>`;document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;login()});$('#loginForm').onsubmit=e=>{e.preventDefault();let f=Object.fromEntries(new FormData(e.target));if(mode==='studio'&&f.email===data.studio.email&&f.password===data.studio.password){localStorage.tfwRole='studio';desk()}else if(mode==='client'){let p=data.projects.find(x=>x.client===f.email&&x.code===f.code);if(p){localStorage.tfwRole='client';localStorage.tfwProject=p.id;client(p)}else $('#error').textContent='That email and access code do not match.'}else $('#error').textContent='Incorrect studio email or password.'}}
-function head(){return `<header class="app-head"><b class="mark">◫ THE FOURTH WALL</b><button class="signout" onclick="signout()">Sign out</button></header>`}function signout(){localStorage.removeItem('tfwRole');login()}
-function client(p){app.innerHTML=`<main class="screen">${head()}<section class="project-hero"><span class="eyebrow">CLIENT SPACE</span><h1>${esc(p.name)}</h1><p>${esc(p.service)}</p><div class="project-meta"><span class="pill">${p.status}</span><span class="pill">Due ${p.due}</span></div><div class="ringrow"><div class="ring" style="--p:${p.progress}" data-p="${p.progress}"></div><div><b>${p.progress}% complete</b><p>Making thoughtful progress.</p></div></div></section><section class="section"><span class="eyebrow">WHAT WE’RE CREATING</span><h2>Deliverables</h2><div class="deliverables">${p.deliverables.map(x=>`<article class="card deliverable"><span class="tick">✦</span><div><b>${esc(x.title)}</b><small>${esc(stateTitle(x.status||'draft'))}</small>${x.approval_history?.length?`<div class="approval-history"><span class="eyebrow">DECISION HISTORY</span>${x.approval_history.map(a=>`<small>${esc(stateTitle(a.decision))} · ${formatDate(a.created_at)} · ${esc(a.typed_signature||a.decided_by)}${a.note?' — '+esc(a.note):''}</small>`).join('')}</div>`:''}${x.id&&x.status!=='approved'?`<div class="actions"><button class="btn alt" onclick="reviewDeliverable('${esc(x.id)}','changes_requested')">REQUEST CHANGES</button><button class="btn" onclick="reviewDeliverable('${esc(x.id)}','approved')">APPROVE →</button></div>`:''}</div></article>`).join('')||empty()}</div></section><section class="section"><span class="eyebrow">SHARED FILES</span><h2>Latest files</h2>${fileList(p.files||[])}<form class="card editor-form" onsubmit="uploadProjectFile(event,'${esc(p.id)}')"><label>Share a file<input name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,application/zip" required></label><button class="btn">UPLOAD →</button></form></section><section class="section"><span class="eyebrow">FROM THE STUDIO</span><h2>Updates</h2><div class="timeline">${p.updates.map(u=>`<article class="card update"><time>${u.date}</time><h3>${esc(u.title)}</h3><p>${esc(u.text)}</p></article>`).join('')}</div></section><button class="btn" style="width:100%;margin-top:22px" onclick="toast('Your message composer is ready in the next version.')">MESSAGE THE STUDIO →</button></main>`}
-function desk(){renderDesk()}function renderDesk(){let body=view==='overview'?overview():view==='leads'?leads():projects();app.innerHTML=`<main class="screen">${head()}<nav class="tabs"><button class="${view==='overview'?'on':''}" onclick="go('overview')">OVERVIEW</button><button class="${view==='leads'?'on':''}" onclick="go('leads')">INQUIRIES</button><button class="${view==='projects'?'on':''}" onclick="go('projects')">PROJECTS</button></nav>${body}${view==='projects'?'<button class="fab" onclick="edit()" aria-label="Create project">+</button>':''}</main>`}function go(v){view=v;renderDesk()}function overview(){let active=data.projects.filter(p=>p.status==='Active').length,newL=data.leads.filter(l=>l.status==='New').length;return `<section class="hero"><span class="eyebrow">STUDIO DESK · <button style="border:0;background:none;color:inherit" onclick="toggleTheme()">${data.theme==='light'?'DARK PAPER':'LIGHT PAPER'}</button></span><h1>Good morning.</h1><p class="muted">The calm before the next great thing.</p></section><div class="metrics"><article class="card metric"><span>NEW LEADS</span><strong>${newL}</strong></article><article class="card metric"><span>ACTIVE WORK</span><strong>${active}</strong></article><article class="card metric"><span>TOTAL LEADS</span><strong>${data.leads.length}</strong></article></div><div class="desktop-grid"><section class="section"><span class="eyebrow">RECENT ACTIVITY</span><h2>Studio pulse</h2>${data.projects[0].updates.slice(0,2).map(u=>`<article class="card update"><time>${u.date}</time><h3>${esc(u.title)}</h3><p>${esc(u.text)}</p></article>`).join('')}</section><section class="section"><span class="eyebrow">NEW INQUIRIES</span><h2>Waiting for you</h2>${data.leads.filter(l=>l.status==='New').map(l=>lead(l)).join('')||empty()}</section></div>`}function lead(l){return `<article class="card row"><div><h3>${esc(l.name)} · ${esc(l.company)}</h3><p>${esc(l.service)} · ${esc(l.email)}</p></div><select aria-label="Lead status" onchange="status(${l.id},this.value)">${['New','Contacted','Qualified','Closed'].map(x=>`<option ${x===l.status?'selected':''}>${x}</option>`).join('')}</select></article>`}function leads(){return `<section class="hero"><span class="eyebrow">INQUIRIES</span><h1>New conversations.</h1></section><div class="filters"><input placeholder="Search leads" oninput="filterLeads(this.value)"><select onchange="filterLeads('',this.value)"><option value="">All</option>${['New','Contacted','Qualified','Closed'].map(x=>`<option>${x}</option>`).join('')}</select></div><div class="list" id="leadList">${data.leads.map(lead).join('')}</div>`}function filterLeads(q='',s=''){let list=data.leads.filter(l=>(!q||JSON.stringify(l).toLowerCase().includes(q.toLowerCase()))&&(!s||l.status===s));$('#leadList').innerHTML=list.map(lead).join('')||empty()}function status(id,s){data.leads.find(l=>l.id===id).status=s;save();toast('Lead status updated.')}function projects(){return `<section class="hero"><span class="eyebrow">DELIVERY BOARD</span><h1>Work in motion.</h1></section><div class="list">${data.projects.map(p=>`<button class="card row" style="text-align:left" onclick="edit(${p.id})"><div><h3>${esc(p.name)}</h3><p>${esc(p.service)} · ${p.progress}% complete</p></div><span class="status">${p.status} →</span></button>`).join('')}</div>`}function empty(){return `<div class="card empty">No work here yet.<b>Something lovely is waiting.</b></div>`}function toggleTheme(){data.theme=data.theme==='light'?'dark':'light';save();document.body.classList.toggle('dark',data.theme==='dark');renderDesk()}
-function edit(id){let p=data.projects.find(x=>x.id===id)||{id:Date.now(),name:'',service:'',status:'Planning',due:'',progress:0,client:'',code:'',deliverables:[],updates:[]};let d=document.createElement('dialog');d.innerHTML=`<form class="modal" method="dialog"><button class="close" value="cancel">×</button><span class="eyebrow">${id?'EDIT PROJECT':'NEW PROJECT'}</span><h2>Keep it moving.</h2><label>Name<input name="name" required value="${esc(p.name)}"></label><label>Service<input name="service" required value="${esc(p.service)}"></label><label>Status<select name="status">${['Planning','Active','Complete'].map(x=>`<option ${x===p.status?'selected':''}>${x}</option>`).join('')}</select></label><label>Due date<input name="due" value="${esc(p.due)}" placeholder="30 Sep 2026"></label><label>Progress <input name="progress" type="range" min="0" max="100" value="${p.progress}"></label><label>Deliverables (one per line)<textarea name="deliverables">${p.deliverables.join('\n')}</textarea></label><label>Post update<textarea name="update" placeholder="What changed today?"></textarea></label><button class="btn">SAVE PROJECT →</button></form>`;document.body.append(d);d.showModal();d.querySelector('form').onsubmit=e=>{e.preventDefault();let f=Object.fromEntries(new FormData(e.target));Object.assign(p,{name:f.name,service:f.service,status:f.status,due:f.due,progress:+f.progress,deliverables:f.deliverables.split('\n').filter(Boolean)});if(f.update)p.updates.unshift({date:'TODAY',title:'Studio update',text:f.update});if(!id)data.projects.unshift(p);save();d.close();d.remove();toast('Project saved.');go('projects')}}
+const $ = (s) => document.querySelector(s),
+  app = $("#app");
+let mode = "client",
+  view = "overview",
+  data;
+const editorSheet = document.createElement("link");
+editorSheet.rel = "stylesheet";
+editorSheet.href = "editor.css";
+document.head.append(editorSheet);
+const seed = {
+  studio: { email: "hello@thefourthwall.com", password: "fourthwall" },
+  client: { email: "client@harshalucknowi.com", code: "HARSHALIVE" },
+  projects: [
+    {
+      id: 1,
+      name: "HarshaLucknowi",
+      service: "Brand identity & social media",
+      status: "Active",
+      due: "30 Sep 2026",
+      progress: 68,
+      client: "client@harshalucknowi.com",
+      code: "HARSHALIVE",
+      deliverables: [
+        "Brand identity system",
+        "September social campaign",
+        "Website design direction",
+      ],
+      updates: [
+        {
+          date: "02 SEP",
+          title: "Social campaign is in review",
+          text: "The next set of campaign visuals is ready for your feedback.",
+          approval: true,
+        },
+        {
+          date: "28 AUG",
+          title: "Identity system approved",
+          text: "Core brand assets have been finalised and organised.",
+        },
+      ],
+    },
+  ],
+  leads: [
+    {
+      id: 1,
+      name: "Anika Rao",
+      company: "Saffron House",
+      service: "Brand identity",
+      email: "anika@saffron.in",
+      status: "New",
+    },
+    {
+      id: 2,
+      name: "Karan Mehta",
+      company: "North Studio",
+      service: "Website",
+      email: "karan@north.studio",
+      status: "Contacted",
+    },
+  ],
+  theme: "light",
+};
+function load() {
+  data = JSON.parse(localStorage.getItem("tfw-pwa") || "null") || structuredClone(seed);
+  document.body.classList.toggle("dark", data.theme === "dark");
+}
+function save() {
+  localStorage.setItem("tfw-pwa", JSON.stringify(data));
+}
+const esc = (s) =>
+  String(s || "").replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+  );
+function toast(t) {
+  $("#toast").textContent = t;
+  $("#toast").classList.add("show");
+  setTimeout(() => $("#toast").classList.remove("show"), 2400);
+}
+function login() {
+  app.innerHTML = `<main class="screen login"><div class="mark">◫ THE FOURTH WALL</div><span class="eyebrow">EDITORIAL STUDIO APP</span><h1>Your work,<br>within reach.</h1><p class="muted">A quiet space for beautiful work in progress.</p><div class="switch"><button class="${mode === "client" ? "on" : ""}" data-mode="client">Client Space</button><button class="${mode === "studio" ? "on" : ""}" data-mode="studio">Studio Desk</button></div><form id="loginForm">${mode === "client" ? `<label>Email<input name="email" type="email" required placeholder="you@yourbrand.com"></label><label>Project access code<input name="code" required placeholder="Provided by your studio"></label>` : `<label>Studio email<input name="email" type="email" required placeholder="hello@thefourthwall.com"></label><label>Password<input name="password" type="password" required placeholder="••••••••"></label>`}<p class="error" id="error"></p><button class="btn">${mode === "client" ? "VIEW MY PROJECT" : "ENTER STUDIO DESK"} →</button></form><p class="hint">${mode === "client" ? "Demo: client@harshalucknowi.com / HARSHALIVE" : "Demo: hello@thefourthwall.com / fourthwall"}</p></main>`;
+  document.querySelectorAll("[data-mode]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        mode = b.dataset.mode;
+        login();
+      }),
+  );
+  $("#loginForm").onsubmit = (e) => {
+    e.preventDefault();
+    let f = Object.fromEntries(new FormData(e.target));
+    if (mode === "studio" && f.email === data.studio.email && f.password === data.studio.password) {
+      localStorage.tfwRole = "studio";
+      desk();
+    } else if (mode === "client") {
+      let p = data.projects.find((x) => x.client === f.email && x.code === f.code);
+      if (p) {
+        localStorage.tfwRole = "client";
+        localStorage.tfwProject = p.id;
+        client(p);
+      } else $("#error").textContent = "That email and access code do not match.";
+    } else $("#error").textContent = "Incorrect studio email or password.";
+  };
+}
+function head() {
+  return `<header class="app-head"><b class="mark">◫ THE FOURTH WALL</b><button class="signout" onclick="signout()">Sign out</button></header>`;
+}
+function signout() {
+  localStorage.removeItem("tfwRole");
+  login();
+}
+function client(p) {
+  app.innerHTML = `<main class="screen">${head()}<section class="project-hero"><span class="eyebrow">CLIENT SPACE</span><h1>${esc(p.name)}</h1><p>${esc(p.service)}</p><div class="project-meta"><span class="pill">${p.status}</span><span class="pill">Due ${p.due}</span></div><div class="ringrow"><div class="ring" style="--p:${p.progress}" data-p="${p.progress}"></div><div><b>${p.progress}% complete</b><p>Making thoughtful progress.</p></div></div></section><section class="section"><span class="eyebrow">WHAT WE’RE CREATING</span><h2>Deliverables</h2><div class="deliverables">${p.deliverables.map((x) => `<article class="card deliverable"><span class="tick">✦</span><div><b>${esc(x.title)}</b><small>${esc(stateTitle(x.status || "draft"))}</small>${x.approval_history?.length ? `<div class="approval-history"><span class="eyebrow">DECISION HISTORY</span>${x.approval_history.map((a) => `<small>${esc(stateTitle(a.decision))} · ${formatDate(a.created_at)} · ${esc(a.typed_signature || a.decided_by)}${a.note ? " — " + esc(a.note) : ""}</small>`).join("")}</div>` : ""}${x.id && x.status !== "approved" ? `<div class="actions"><button class="btn alt" onclick="reviewDeliverable('${esc(x.id)}','changes_requested')">REQUEST CHANGES</button><button class="btn" onclick="reviewDeliverable('${esc(x.id)}','approved')">APPROVE →</button></div>` : ""}</div></article>`).join("") || empty()}</div></section><section class="section"><span class="eyebrow">SHARED FILES</span><h2>Latest files</h2>${fileList(p.files || [])}<form class="card editor-form" onsubmit="uploadProjectFile(event,'${esc(p.id)}')"><label>Share a file<input name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,application/zip" required></label><button class="btn">UPLOAD →</button></form></section><section class="section"><span class="eyebrow">FROM THE STUDIO</span><h2>Updates</h2><div class="timeline">${p.updates.map((u) => `<article class="card update"><time>${u.date}</time><h3>${esc(u.title)}</h3><p>${esc(u.text)}</p></article>`).join("")}</div></section><button class="btn" style="width:100%;margin-top:22px" onclick="toast('Your message composer is ready in the next version.')">MESSAGE THE STUDIO →</button></main>`;
+}
+function desk() {
+  renderDesk();
+}
+function renderDesk() {
+  let body = view === "overview" ? overview() : view === "leads" ? leads() : projects();
+  app.innerHTML = `<main class="screen">${head()}<nav class="tabs"><button class="${view === "overview" ? "on" : ""}" onclick="go('overview')">OVERVIEW</button><button class="${view === "leads" ? "on" : ""}" onclick="go('leads')">INQUIRIES</button><button class="${view === "projects" ? "on" : ""}" onclick="go('projects')">PROJECTS</button></nav>${body}${view === "projects" ? '<button class="fab" onclick="edit()" aria-label="Create project">+</button>' : ""}</main>`;
+}
+function go(v) {
+  view = v;
+  renderDesk();
+}
+function overview() {
+  let active = data.projects.filter((p) => p.status === "Active").length,
+    newL = data.leads.filter((l) => l.status === "New").length;
+  return `<section class="hero"><span class="eyebrow">STUDIO DESK · <button style="border:0;background:none;color:inherit" onclick="toggleTheme()">${data.theme === "light" ? "DARK PAPER" : "LIGHT PAPER"}</button></span><h1>Good morning.</h1><p class="muted">The calm before the next great thing.</p></section><div class="metrics"><article class="card metric"><span>NEW LEADS</span><strong>${newL}</strong></article><article class="card metric"><span>ACTIVE WORK</span><strong>${active}</strong></article><article class="card metric"><span>TOTAL LEADS</span><strong>${data.leads.length}</strong></article></div><div class="desktop-grid"><section class="section"><span class="eyebrow">RECENT ACTIVITY</span><h2>Studio pulse</h2>${data.projects[0].updates
+    .slice(0, 2)
+    .map(
+      (u) =>
+        `<article class="card update"><time>${u.date}</time><h3>${esc(u.title)}</h3><p>${esc(u.text)}</p></article>`,
+    )
+    .join(
+      "",
+    )}</section><section class="section"><span class="eyebrow">NEW INQUIRIES</span><h2>Waiting for you</h2>${
+    data.leads
+      .filter((l) => l.status === "New")
+      .map((l) => lead(l))
+      .join("") || empty()
+  }</section></div>`;
+}
+function lead(l) {
+  return `<article class="card row"><div><h3>${esc(l.name)} · ${esc(l.company)}</h3><p>${esc(l.service)} · ${esc(l.email)}</p></div><select aria-label="Lead status" onchange="status(${l.id},this.value)">${["New", "Contacted", "Qualified", "Closed"].map((x) => `<option ${x === l.status ? "selected" : ""}>${x}</option>`).join("")}</select></article>`;
+}
+function leads() {
+  return `<section class="hero"><span class="eyebrow">INQUIRIES</span><h1>New conversations.</h1></section><div class="filters"><input placeholder="Search leads" oninput="filterLeads(this.value)"><select onchange="filterLeads('',this.value)"><option value="">All</option>${["New", "Contacted", "Qualified", "Closed"].map((x) => `<option>${x}</option>`).join("")}</select></div><div class="list" id="leadList">${data.leads.map(lead).join("")}</div>`;
+}
+function filterLeads(q = "", s = "") {
+  let list = data.leads.filter(
+    (l) =>
+      (!q || JSON.stringify(l).toLowerCase().includes(q.toLowerCase())) && (!s || l.status === s),
+  );
+  $("#leadList").innerHTML = list.map(lead).join("") || empty();
+}
+function status(id, s) {
+  data.leads.find((l) => l.id === id).status = s;
+  save();
+  toast("Lead status updated.");
+}
+function projects() {
+  return `<section class="hero"><span class="eyebrow">DELIVERY BOARD</span><h1>Work in motion.</h1></section><div class="list">${data.projects.map((p) => `<button class="card row" style="text-align:left" onclick="edit(${p.id})"><div><h3>${esc(p.name)}</h3><p>${esc(p.service)} · ${p.progress}% complete</p></div><span class="status">${p.status} →</span></button>`).join("")}</div>`;
+}
+function empty() {
+  return `<div class="card empty">No work here yet.<b>Something lovely is waiting.</b></div>`;
+}
+function toggleTheme() {
+  data.theme = data.theme === "light" ? "dark" : "light";
+  save();
+  document.body.classList.toggle("dark", data.theme === "dark");
+  renderDesk();
+}
+function edit(id) {
+  let p = data.projects.find((x) => x.id === id) || {
+    id: Date.now(),
+    name: "",
+    service: "",
+    status: "Planning",
+    due: "",
+    progress: 0,
+    client: "",
+    code: "",
+    deliverables: [],
+    updates: [],
+  };
+  let d = document.createElement("dialog");
+  d.innerHTML = `<form class="modal" method="dialog"><button class="close" value="cancel">×</button><span class="eyebrow">${id ? "EDIT PROJECT" : "NEW PROJECT"}</span><h2>Keep it moving.</h2><label>Name<input name="name" required value="${esc(p.name)}"></label><label>Service<input name="service" required value="${esc(p.service)}"></label><label>Status<select name="status">${["Planning", "Active", "Complete"].map((x) => `<option ${x === p.status ? "selected" : ""}>${x}</option>`).join("")}</select></label><label>Due date<input name="due" value="${esc(p.due)}" placeholder="30 Sep 2026"></label><label>Progress <input name="progress" type="range" min="0" max="100" value="${p.progress}"></label><label>Deliverables (one per line)<textarea name="deliverables">${p.deliverables.join("\n")}</textarea></label><label>Post update<textarea name="update" placeholder="What changed today?"></textarea></label><button class="btn">SAVE PROJECT →</button></form>`;
+  document.body.append(d);
+  d.showModal();
+  d.querySelector("form").onsubmit = (e) => {
+    e.preventDefault();
+    let f = Object.fromEntries(new FormData(e.target));
+    Object.assign(p, {
+      name: f.name,
+      service: f.service,
+      status: f.status,
+      due: f.due,
+      progress: +f.progress,
+      deliverables: f.deliverables.split("\n").filter(Boolean),
+    });
+    if (f.update) p.updates.unshift({ date: "TODAY", title: "Studio update", text: f.update });
+    if (!id) data.projects.unshift(p);
+    save();
+    d.close();
+    d.remove();
+    toast("Project saved.");
+    go("projects");
+  };
+}
 /* Live production API layer. Cached browser data remains available if offline. */
-const LIVE_API='https://fourthwall.krishikesannn.workers.dev/api';let liveSession=JSON.parse(localStorage.getItem('tfw-session')||'null'),clientProjectChoices=[];
-const stateTitle=value=>String(value||'planning').replace('_',' ').replace(/\b\w/g,x=>x.toUpperCase());
-const formatDate=value=>value?new Date(value).toLocaleDateString(undefined,{day:'2-digit',month:'short'}).toUpperCase():'TODAY';
-const mapProject=(p,deliverables=[],updates=[],files=[],assets=[],workspace={})=>({id:p.id,name:p.name,service:p.service,status:stateTitle(p.status),due:p.due_date||'To be confirmed',progress:p.progress||0,deliverables:deliverables.map(d=>typeof d==='string'?{title:d}:d),updates:updates.map(u=>({date:formatDate(u.created_at),title:u.title,text:u.body,approval:!!u.requires_approval})),files,assets,milestones:workspace.milestones||[],tasks:workspace.tasks||[],messages:workspace.messages||[],moodboards:workspace.moodboards||[],reviews:workspace.reviews||[],posts:workspace.posts||[],announcements:workspace.announcements||[],onboarding:workspace.onboarding||{items:[],intake:null},guidelines:workspace.guidelines||[],timeEntries:workspace.timeEntries||[],invoices:workspace.invoices||[],proposals:workspace.proposals||[],meetings:workspace.meetings||[],providers:workspace.providers||{}});
-const mapLead=l=>({id:l.id,name:l.name,company:l.company||'Independent',service:l.service||'Creative partnership',email:l.email,status:stateTitle(l.status)});
-const basicHead=head;
-head=function(){return basicHead().replace('<button class="signout"',`${liveSession?.user?.role==='client'&&clientProjectChoices.length>1?`<select class="project-switcher" aria-label="Switch project" onchange="switchClientProject(this.value)">${clientProjectChoices.map(p=>`<option value="${esc(p.id)}" ${String(p.id)===String(localStorage.tfwProject)?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`:''}<button class="signout" onclick="openGlobalSearch()" aria-label="Search">Search</button>${liveSession?.user?.role!=='client'?'<button class="signout" onclick="openLeadPipeline()">Pipeline</button><button class="signout" onclick="openOperations()">Operations</button><button class="signout" onclick="openAnalytics()">Analytics</button>':''}<button class="signout" onclick="openAppSettings()">Settings</button><button class="signout"`)}
-async function switchClientProject(id){localStorage.tfwProject=id;client(await refreshClient(id))}
-async function nativeUnlock(force=false){if(!force&&localStorage.tfwBiometric!=='1')return true;const plugin=window.Capacitor?.Plugins?.BiometricAuth;if(!plugin){if(force)toast('Biometric lock is available in the installed Android app.');return !force}try{const info=await plugin.checkBiometry();if(!info.isAvailable)throw Error('Biometrics are not available on this phone.');await plugin.authenticate({reason:'Unlock The Fourth Wall',cancelTitle:'Cancel',allowDeviceCredential:true,androidTitle:'Unlock The Fourth Wall',androidSubtitle:'Use biometrics or your device lock'});return true}catch(error){toast(error.message||'App unlock was cancelled.');return false}}
-async function openAppSettings(){const d=document.createElement('dialog');d.innerHTML=`<form class="modal editor-form" id="appSettingsForm"><button class="close" type="button" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">APP SETTINGS</span><h2>Make the space yours.</h2><label>Language<select name="language"><option value="en">English</option><option value="hi">हिन्दी</option></select></label><label>Paper theme<select name="theme"><option value="light">Light parchment</option><option value="dark">Evergreen paper</option></select></label><label class="check-row"><input name="biometricLock" type="checkbox" ${localStorage.tfwBiometric==='1'?'checked':''}> Biometric app lock on this device</label><button class="btn">SAVE SETTINGS</button></form>`;document.body.append(d);d.showModal();d.addEventListener('close',()=>d.remove());$('#appSettingsForm').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget,values={language:form.elements.language.value,theme:form.elements.theme.value,biometricLock:form.elements.biometricLock.checked};if(values.biometricLock&&localStorage.tfwBiometric!=='1'&&!(await nativeUnlock(true)))return;await live('/settings/profile',{method:'PATCH',body:JSON.stringify(values)});localStorage.tfwBiometric=values.biometricLock?'1':'0';data.theme=values.theme;save();document.body.classList.toggle('dark',values.theme==='dark');d.close();toast('App settings saved.')}}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&liveSession?.token)nativeUnlock()});
-async function openGlobalSearch(){const dialog=document.createElement('dialog');dialog.innerHTML=`<section class="modal"><button class="close" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">GLOBAL SEARCH</span><h2>Find anything.</h2><label>Search projects, files and leads<input id="globalQuery" type="search" autocomplete="off" placeholder="Start typing…"></label><div class="list" id="globalResults"></div></section>`;document.body.append(dialog);dialog.showModal();const input=$('#globalQuery'),results=$('#globalResults');let timer;input.oninput=()=>{clearTimeout(timer);timer=setTimeout(async()=>{if(input.value.trim().length<2){results.innerHTML='';return}try{const response=await live(`/search?q=${encodeURIComponent(input.value)}`);results.innerHTML=response.results.map(item=>`<article class="card row"><div><h3>${esc(item.title)}</h3><p>${esc(stateTitle(item.type))} · ${esc(item.subtitle||'')}</p></div></article>`).join('')||empty()}catch(reason){results.innerHTML=`<p class="error">${esc(reason.message)}</p>`}},250)};dialog.addEventListener('close',()=>dialog.remove());input.focus()}
-async function openOperations(){try{const data=await live('/operations'),dialog=document.createElement('dialog');dialog.innerHTML=`<section class="modal operations"><button class="close" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">STUDIO OPERATIONS</span><h2>People and systems.</h2><div class="metrics"><article class="card metric"><span>CONTACTS</span><strong>${data.contacts.length}</strong></article><article class="card metric"><span>TEAM</span><strong>${data.team.length}</strong></article><article class="card metric"><span>FOLLOW-UPS</span><strong>${data.leadActivities.filter(x=>x.follow_up_at).length}</strong></article></div><section class="section"><h3>Client CRM</h3>${data.contacts.map(c=>`<article class="card row"><div><b>${esc(c.name)}</b><p>${esc(c.company||c.email)}${c.renewal_at?' · Renewal '+esc(c.renewal_at):''}</p></div></article>`).join('')||empty()}<form class="editor-form" onsubmit="createOperation(event,'contacts')"><input name="name" required placeholder="Contact name"><input name="email" type="email" required placeholder="Email"><input name="company" placeholder="Company"><input name="renewalAt" type="date"><button class="btn">ADD CONTACT</button></form></section><section class="section"><h3>Update templates</h3>${data.templates.map(t=>`<article class="card update"><h3>${esc(t.name)}</h3><p>${esc(t.title)}</p></article>`).join('')||empty()}<form class="editor-form" onsubmit="createOperation(event,'update-templates')"><input name="name" required placeholder="Template name"><input name="title" required placeholder="Update title"><textarea name="body" required placeholder="Reusable update text"></textarea><button class="btn">SAVE TEMPLATE</button></form></section><section class="section"><h3>Broadcast</h3><form class="editor-form" onsubmit="createOperation(event,'announcements')"><input name="title" required placeholder="Announcement title"><textarea name="body" required placeholder="Message to active clients"></textarea><button class="btn">PUBLISH</button></form></section></section>`;document.body.append(dialog);dialog.showModal();dialog.addEventListener('close',()=>dialog.remove())}catch(reason){toast(reason.message)}}
-async function createOperation(event,path){event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget));try{await live(`/`+path,{method:'POST',body:JSON.stringify(values)});event.currentTarget.reset();toast('Saved.')}catch(reason){toast(reason.message)}}
-async function openAnalytics(){try{const value=await live('/analytics'),d=document.createElement('dialog');const total=value.leads.reduce((n,x)=>n+x.total,0),won=value.leads.reduce((n,x)=>n+x.closed,0);d.innerHTML=`<section class="modal"><button class="close" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">STUDIO ANALYTICS</span><h2>What the work reveals.</h2><div class="metrics"><article class="card metric"><span>LEADS</span><strong>${total}</strong></article><article class="card metric"><span>WIN RATE</span><strong>${total?Math.round(won/total*100):0}%</strong></article><article class="card metric"><span>OVERDUE</span><strong>${value.overdue}</strong></article></div><section class="section"><h3>Revenue-ready service mix</h3>${value.projects.map(x=>`<article class="card row"><div><b>${esc(x.service)}</b><p>${x.projects} projects · ${Math.round(x.avg_days||0)} avg days</p></div></article>`).join('')||empty()}</section><section class="section"><h3>Tracked time</h3>${value.time.map(x=>`<article class="card row"><b>${esc(x.name)}</b><span>${Math.round(x.minutes/60*10)/10} h</span></article>`).join('')||empty()}</section><button class="btn" onclick="downloadExport()">EXPORT CRM DATA ↓</button></section>`;document.body.append(d);d.showModal();d.addEventListener('close',()=>d.remove())}catch(reason){toast(reason.message)}}
-function openLeadPipeline(){const d=document.createElement('dialog'),stages=['New','Contacted','Qualified','Closed'];d.innerHTML=`<section class="modal pipeline-modal"><button class="close" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">LEAD PIPELINE</span><h2>Conversations in motion.</h2><div class="pipeline">${stages.map(stage=>`<section class="pipeline-stage" data-stage="${stage}" ondragover="event.preventDefault()" ondrop="dropLead(event,'${stage}')"><h3>${stage}</h3>${data.leads.filter(l=>l.status===stage).map(l=>`<article class="card" draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${esc(l.id)}')"><b>${esc(l.name)}</b><p>${esc(l.company)}</p><button class="signout" onclick="addLeadNote('${esc(l.id)}')">Note / follow-up</button></article>`).join('')}</section>`).join('')}</div></section>`;document.body.append(d);d.showModal();d.addEventListener('close',()=>d.remove())}
-async function dropLead(event,next){const id=event.dataTransfer.getData('text/plain');await status(id,next);event.currentTarget.closest('dialog').close();openLeadPipeline()}
-async function addLeadNote(id){const note=prompt('Add a note or follow-up detail:','');if(!note)return;try{await live(`/inquiries/${id}/activities`,{method:'POST',body:JSON.stringify({kind:'follow_up',note})});toast('Lead activity saved.')}catch(reason){toast(reason.message)}}
-async function downloadExport(projectId=''){try{const response=await fetch(`${LIVE_API}/export${projectId?`?projectId=${encodeURIComponent(projectId)}`:''}`,{headers:{authorization:`Bearer ${liveSession.token}`}});if(!response.ok)throw Error('Export failed.');const a=document.createElement('a');a.href=URL.createObjectURL(await response.blob());a.download='fourth-wall-export.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}catch(reason){toast(reason.message)}}
-const bytesLabel=value=>value>=1048576?`${(value/1048576).toFixed(1)} MB`:`${Math.max(1,Math.round(value/1024))} KB`;
-function fileList(files){return files.length?`<div class="list">${files.map(file=>`<button class="card row project-row" onclick="downloadProjectFile('${esc(file.id)}','${esc(file.file_name)}')"><div><h3>${esc(file.file_name)}</h3><p>${file.deliverable_id?`Version ${file.version} · `:''}${bytesLabel(file.size_bytes)} · ${esc(file.uploaded_by)}</p></div><span class="status">DOWNLOAD ↓</span></button>`).join('')}</div>`:empty()}
-function assetList(assets){return assets.length?`<div class="asset-grid">${assets.map(asset=>`<article class="card asset-card"><span class="eyebrow">${esc(asset.kind)} · V${asset.version}</span><h3>${esc(asset.name)}</h3>${asset.kind==='color'?`<button class="token" style="--token:${esc(asset.token_value)}" onclick="copyToken('${esc(asset.token_value)}')"><i></i><span>${esc(asset.token_value)}</span> COPY</button>`:`<button class="btn alt" onclick="downloadProjectFile('${esc(asset.file_id)}','${esc(asset.file_name)}')">DOWNLOAD ↓</button>`}</article>`).join('')}</div>`:empty()}
-async function copyToken(value){try{await navigator.clipboard.writeText(value);toast('Colour token copied.')}catch(_){toast(value)}}
-async function uploadProjectFile(event,projectId){event.preventDefault();const input=event.currentTarget.elements.file,file=input.files[0];if(!file)return;if(file.size>26214400){toast('Choose a file smaller than 25 MB.');return}try{await live(`/projects/${projectId}/files`,{method:'POST',headers:{'content-type':file.type,'x-file-name':encodeURIComponent(file.name)},body:await file.arrayBuffer()});toast('File uploaded securely.');if(liveSession.user.role==='client')client(await refreshClient(projectId));else await openProject(projectId)}catch(reason){toast(reason.message)}}
-async function downloadProjectFile(id,name){try{let response=await fetch(`${LIVE_API}/files/${id}/download`,{headers:{authorization:`Bearer ${liveSession.token}`}});if(!response.ok)throw Error((await response.json().catch(()=>({}))).error||'Download failed.');let link=document.createElement('a');link.href=URL.createObjectURL(await response.blob());link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000)}catch(reason){toast(reason.message)}}
-async function reviewDeliverable(id,decision){const typedSignature=decision==='approved'?prompt('Type your name to approve this deliverable:',''):'';if(decision==='approved'&&!typedSignature)return;const note=decision==='changes_requested'?prompt('What should the studio change?',''):'';if(decision==='changes_requested'&&!note)return;try{await live(`/deliverables/${id}/approvals`,{method:'POST',body:JSON.stringify({decision,typedSignature,note})});client(await refreshClient(localStorage.tfwProject));toast(decision==='approved'?'Approved with timestamp.':'Changes requested.')}catch(reason){toast(reason.message)}}
-const readOfflineQueue=()=>JSON.parse(localStorage.getItem('tfw-offline-queue')||'[]');
-function addOfflineMutation(path,options){const queue=readOfflineQueue();queue.push({id:crypto.randomUUID(),path,method:options.method,body:options.body,createdAt:new Date().toISOString()});localStorage.setItem('tfw-offline-queue',JSON.stringify(queue));toast('Saved offline — it will sync automatically.');return{queued:true}}
-async function syncOfflineQueue(){if(!navigator.onLine||!liveSession?.token)return;const queue=readOfflineQueue(),remaining=[];for(const item of queue){try{await live(item.path,{method:item.method,body:item.body})}catch(_){remaining.push(item)}}localStorage.setItem('tfw-offline-queue',JSON.stringify(remaining));if(queue.length&&!remaining.length)toast('Offline changes synced.')}
-async function live(path,options={}){let headers={...(options.headers||{})};if(options.body&&!headers['content-type']&&!(options.body instanceof ArrayBuffer)&&!(options.body instanceof Blob))headers['content-type']='application/json';if(liveSession?.token)headers.authorization=`Bearer ${liveSession.token}`;let response;try{response=await fetch(`${LIVE_API}${path}`,{...options,headers})}catch(error){const queueable=/^(POST|PATCH)$/.test(options.method||'')&&!path.startsWith('/auth/')&&!path.endsWith('/files');if((options.queueOnFail||queueable)&&typeof options.body==='string')return addOfflineMutation(path,options);throw error}let result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||'The studio service could not complete that request.');return result}
-window.addEventListener('online',syncOfflineQueue);
-function storeSession(next){liveSession=next;localStorage.setItem('tfw-session',JSON.stringify(next))}
-async function refreshStudio(){let[projects,inquiries]=await Promise.all([live('/projects'),live('/inquiries')]);data.projects=projects.projects.map(p=>mapProject(p));data.leads=inquiries.inquiries.map(mapLead);save()}
-async function refreshClient(projectId){if(!clientProjectChoices.length){const choices=await live('/projects');clientProjectChoices=choices.projects.map(p=>({id:p.id,name:p.name}))}let[detail,updates,files,assets,workspace,reviews,calendar,announcements,onboarding,insights,commercial]=await Promise.all([live(`/projects/${projectId}`),live(`/projects/${projectId}/updates`),live(`/projects/${projectId}/files`),live(`/projects/${projectId}/brand-assets`),live(`/projects/${projectId}/workspace`),live(`/projects/${projectId}/reviews`),live(`/projects/${projectId}/content-posts`),live('/announcements'),live(`/projects/${projectId}/onboarding`),live(`/projects/${projectId}/insights`),live(`/projects/${projectId}/commercial`).catch(()=>({invoices:[],proposals:[],meetings:[],providers:{}}))]),project=mapProject(detail.project,detail.deliverables,updates.updates,files.files,assets.assets,{...workspace,reviews:reviews.comments,posts:calendar.posts,announcements:announcements.announcements,onboarding,...insights,...commercial});data.projects=[project];save();return project}
-login=function(){app.innerHTML=`<main class="screen login"><div class="mark">◫ THE FOURTH WALL</div><span class="eyebrow">EDITORIAL STUDIO APP</span><h1>Your work,<br>within reach.</h1><p class="muted">A quiet space for beautiful work in progress.</p><div class="switch"><button class="${mode==='client'?'on':''}" data-mode="client">Client Space</button><button class="${mode==='studio'?'on':''}" data-mode="studio">Studio Desk</button></div><form id="loginForm">${mode==='client'?`<label>Email<input name="email" type="email" required placeholder="you@yourbrand.com"></label><label>Project access code<input name="code" required placeholder="Provided by your studio"></label>`:`<label>Studio email<input name="email" type="email" required placeholder="you@yourstudio.com"></label><label>Password<input name="password" type="password" required placeholder="••••••••"></label>`}<p class="error" id="error"></p><button class="btn" id="loginButton">${mode==='client'?'VIEW MY PROJECT':'ENTER STUDIO DESK'} →</button></form><p class="hint">${mode==='client'?'Ask your studio for a project access code.':'Use your studio owner or member account.'}</p></main>`;document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;login()});$('#loginForm').onsubmit=async e=>{e.preventDefault();let form=Object.fromEntries(new FormData(e.target)),error=$('#error'),button=$('#loginButton');error.textContent='';button.disabled=true;button.textContent='OPENING…';try{if(mode==='studio'){let result=await live('/auth/login',{method:'POST',body:JSON.stringify(form)});storeSession(result);await refreshStudio();localStorage.tfwRole='studio';desk()}else{let result=await live('/auth/client-login',{method:'POST',body:JSON.stringify(form)});storeSession(result);let project=await refreshClient(result.projectId);localStorage.tfwRole='client';localStorage.tfwProject=project.id;client(project)}}catch(reason){error.textContent=reason.message;button.disabled=false;button.textContent=mode==='client'?'VIEW MY PROJECT →':'ENTER STUDIO DESK →'}}}
-signout=async function(){try{await live('/auth/logout',{method:'POST',body:'{}'})}catch(_){ }liveSession=null;localStorage.removeItem('tfw-session');localStorage.removeItem('tfwRole');localStorage.removeItem('tfwProject');login()}
-overview=function(){let active=data.projects.filter(p=>p.status==='Active').length,newL=data.leads.filter(l=>l.status==='New').length;return `<section class="hero"><span class="eyebrow">STUDIO DESK · <button style="border:0;background:none;color:inherit" onclick="toggleTheme()">${data.theme==='light'?'DARK PAPER':'LIGHT PAPER'}</button></span><h1>Good morning.</h1><p class="muted">The calm before the next great thing.</p></section><div class="metrics"><article class="card metric"><span>NEW LEADS</span><strong>${newL}</strong></article><article class="card metric"><span>ACTIVE WORK</span><strong>${active}</strong></article><article class="card metric"><span>TOTAL LEADS</span><strong>${data.leads.length}</strong></article></div><div class="desktop-grid"><section class="section"><span class="eyebrow">PROJECTS</span><h2>Studio pulse</h2>${data.projects.slice(0,2).map(p=>`<article class="card update"><time>${esc(p.status)}</time><h3>${esc(p.name)}</h3><p>${p.progress}% complete · ${esc(p.service)}</p></article>`).join('')||empty()}</section><section class="section"><span class="eyebrow">NEW INQUIRIES</span><h2>Waiting for you</h2>${data.leads.filter(l=>l.status==='New').map(l=>lead(l)).join('')||empty()}</section></div>`}
-status=async function(id,next){let lead=data.leads.find(l=>l.id==id),previous=lead?.status;if(!lead)return;lead.status=next;renderDesk();try{await live(`/inquiries/${id}`,{method:'PATCH',body:JSON.stringify({status:next.toLowerCase()})});save();toast('Lead status updated.')}catch(reason){lead.status=previous;renderDesk();toast(reason.message)}}
-lead=function(l){return `<article class="card row"><div><h3>${esc(l.name)} · ${esc(l.company)}</h3><p>${esc(l.service)} · ${esc(l.email)}</p></div><select aria-label="Lead status" onchange="status('${esc(l.id)}',this.value)">${['New','Contacted','Qualified','Closed'].map(x=>`<option ${x===l.status?'selected':''}>${x}</option>`).join('')}</select></article>`}
-projects=function(){return `<section class="hero"><span class="eyebrow">DELIVERY BOARD</span><h1>Work in motion.</h1><p class="muted">Open a project to update its client-facing delivery space.</p></section><div class="list">${data.projects.map(p=>`<button class="card row project-row" onclick="openProject('${esc(p.id)}')"><div><h3>${esc(p.name)}</h3><p>${esc(p.service)} · ${p.progress}% complete</p></div><span class="status">${esc(p.status)} →</span></button>`).join('')||empty()}</div>`}
-async function openProject(id){try{const[detail,updates,files,assets,workspace,reviews,calendar,insights,commercial]=await Promise.all([live(`/projects/${id}`),live(`/projects/${id}/updates`),live(`/projects/${id}/files`),live(`/projects/${id}/brand-assets`),live(`/projects/${id}/workspace`),live(`/projects/${id}/reviews`),live(`/projects/${id}/content-posts`),live(`/projects/${id}/insights`),live(`/projects/${id}/commercial`).catch(()=>({invoices:[],proposals:[],meetings:[],providers:{}}))]);projectEditor(mapProject(detail.project,detail.deliverables,updates.updates,files.files,assets.assets,{...workspace,reviews:reviews.comments,posts:calendar.posts,...insights,...commercial}))}catch(reason){toast(reason.message)}}
-function projectEditor(project){const status=String(project.status).toLowerCase().replaceAll(' ','_');app.innerHTML=`<main class="screen">${head()}<button class="back-link" onclick="go('projects')">← Back to projects</button><section class="hero editor-hero"><span class="eyebrow">PROJECT DELIVERY</span><h1>${esc(project.name)}</h1><p class="muted">Changes here appear in the client project space.</p></section><form class="card editor-form" id="projectSettings"><span class="eyebrow">PROJECT DETAILS</span><label>Project name<input name="name" required value="${esc(project.name)}"></label><label>Service<input name="service" required value="${esc(project.service)}"></label><div class="form-split"><label>Status<select name="status">${['planning','active','complete','on_hold'].map(value=>`<option value="${value}" ${value===status?'selected':''}>${esc(stateTitle(value))}</option>`).join('')}</select></label><label>Due date<input name="dueDate" type="date" value="${esc(project.due==='To be confirmed'?'':project.due)}"></label></div><label>Progress <output id="progressValue">${project.progress}%</output><input name="progress" type="range" min="0" max="100" value="${project.progress}" oninput="document.querySelector('#progressValue').value=this.value+'%'" aria-label="Project progress"></label><button class="btn">SAVE PROJECT →</button></form><section class="section"><span class="eyebrow">DELIVERABLES</span><h2>What the client will receive</h2><div class="deliverables">${project.deliverables.length?project.deliverables.map(item=>`<div class="card deliverable"><span class="tick">✦</span><div><b>${esc(item.title)}</b><small>${esc(stateTitle(item.status||'draft'))}</small></div></div>`).join(''):empty()}</div><form class="inline-form" id="deliverableForm"><input name="title" required maxlength="180" placeholder="Add a deliverable"><button class="btn">ADD</button></form></section><section class="section"><span class="eyebrow">SHARED FILES</span><h2>Client and studio files</h2>${fileList(project.files||[])}<form class="card editor-form" id="fileForm"><label>Upload JPG, PNG, WebP, PDF, or ZIP (25 MB max)<input name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,application/zip" required></label><label>Attach to deliverable (optional)<select name="deliverableId"><option value="">General project file</option>${project.deliverables.map(item=>`<option value="${esc(item.id)}">${esc(item.title)}</option>`).join('')}</select></label><button class="btn">UPLOAD FILE →</button></form></section><section class="section"><span class="eyebrow">STUDIO UPDATE</span><h2>Share progress</h2><form class="card editor-form" id="updateForm"><label>Update title<input name="title" maxlength="160" placeholder="Design direction ready for review"></label><label>Update text<textarea name="body" required maxlength="5000" rows="4" placeholder="What should the client know?"></textarea></label><label class="check-row"><input name="requiresApproval" type="checkbox"> Ask the client to approve this update</label><label class="check-row"><input name="visibleToClient" type="checkbox" checked> Visible to the client</label><button class="btn">POST UPDATE →</button></form></section></main>`;$('#projectSettings').onsubmit=event=>saveProject(event,project.id);$('#deliverableForm').onsubmit=event=>addDeliverable(event,project.id);$('#fileForm').onsubmit=event=>uploadStudioFile(event,project.id);$('#updateForm').onsubmit=event=>postProjectUpdate(event,project.id)}
-const renderClientCore=client;
-client=function(project){renderClientCore(project);const section=document.createElement('section');section.className='section';section.innerHTML=`<span class="eyebrow">BRAND ASSET LIBRARY</span><h2>Your brand, organised.</h2>${assetList(project.assets||[])}`;const screen=$('.screen'),action=screen.lastElementChild;screen.insertBefore(section,action)}
-const renderProjectEditorCore=projectEditor;
-projectEditor=function(project){renderProjectEditorCore(project);const section=document.createElement('section');section.className='section';section.innerHTML=`<span class="eyebrow">BRAND ASSET LIBRARY</span><h2>Latest and archived versions</h2>${assetList(project.assets||[])}<form class="card editor-form" id="assetForm"><label>Asset type<select name="kind"><option value="logo">Logo</option><option value="font">Font</option><option value="color">Colour token</option><option value="template">Template</option></select></label><label>Asset name<input name="name" required maxlength="160" placeholder="Primary evergreen"></label><label>Colour value (for colour tokens)<input name="tokenValue" maxlength="500" placeholder="#0E3832"></label><label>File (logos, fonts, templates)<input name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,application/zip"></label><button class="btn">ADD NEW VERSION →</button></form>`;$('.screen').append(section);$('#assetForm').onsubmit=event=>createBrandAsset(event,project.id)}
-async function createBrandAsset(event,projectId){event.preventDefault();const form=event.currentTarget,values=Object.fromEntries(new FormData(form)),file=form.elements.file.files[0];try{let fileId=null;if(values.kind!=='color'){if(!file)throw Error('Choose a file for this asset.');const uploaded=await live(`/projects/${projectId}/files`,{method:'POST',headers:{'content-type':file.type,'x-file-name':encodeURIComponent(file.name)},body:await file.arrayBuffer()});fileId=uploaded.file.id}await live(`/projects/${projectId}/brand-assets`,{method:'POST',body:JSON.stringify({kind:values.kind,name:values.name,tokenValue:values.tokenValue,fileId})});await openProject(projectId);toast('Brand asset version added.')}catch(reason){toast(reason.message)}}
-function collaborationView(project,studioView=false){return `<section class="section"><span class="eyebrow">PROJECT TIMELINE</span><h2>Milestones</h2>${project.milestones.length?project.milestones.map(m=>`<article class="card row"><div><h3>${esc(m.title)}</h3><p>${esc(m.due_date||'Date to be confirmed')}</p></div>${m.waiting_on?`<span class="status">WAITING ON ${esc(m.waiting_on.toUpperCase())}</span>`:''}</article>`).join(''):empty()}${studioView?`<form class="inline-form" onsubmit="createCollaboration(event,'${esc(project.id)}','milestones')"><input name="title" required placeholder="Add milestone"><button class="btn">ADD</button></form>`:''}</section><section class="section"><span class="eyebrow">MESSAGES</span><h2>Project conversation</h2><div class="timeline">${project.messages.map(m=>`<article class="card update"><time>${formatDate(m.created_at)}</time><h3>${esc(m.sender_name)}</h3><p>${esc(m.body)}</p></article>`).join('')||empty()}</div><form class="inline-form" onsubmit="createCollaboration(event,'${esc(project.id)}','messages')"><input name="body" required maxlength="5000" placeholder="Write a message"><button class="btn">SEND</button></form></section><section class="section"><span class="eyebrow">CONCEPT BOARDS</span><h2>Moodboard reactions</h2>${project.moodboards.map(board=>`<article class="card update"><h3>${esc(board.title)}</h3><p>${esc(board.note||'')}</p><div class="actions">${['love','consider','pass'].map(r=>`<button class="btn ${board.reaction===r?'':'alt'}" onclick="reactMoodboard('${esc(board.id)}','${r}','${esc(project.id)}')">${r}</button>`).join('')}</div></article>`).join('')||empty()}</section>${studioView?`<section class="section"><span class="eyebrow">STUDIO TASKS</span><h2>Delivery checklist</h2>${project.tasks.map(t=>`<article class="card row"><div><h3>${esc(t.title)}</h3><p>${esc(stateTitle(t.status))}${t.due_date?' · '+esc(t.due_date):''}</p></div>${t.waiting_on_client?'<span class="status">WAITING ON CLIENT</span>':''}</article>`).join('')||empty()}<form class="inline-form" onsubmit="createCollaboration(event,'${esc(project.id)}','tasks')"><input name="title" required placeholder="Add studio task"><button class="btn">ADD</button></form></section>`:''}`}
-const renderClientWithAssets=client;client=function(project){renderClientWithAssets(project);$('.screen').insertAdjacentHTML('beforeend',collaborationView(project,false))}
-const renderEditorWithAssets=projectEditor;projectEditor=function(project){renderEditorWithAssets(project);$('.screen').insertAdjacentHTML('beforeend',collaborationView(project,true))}
-async function createCollaboration(event,projectId,type){event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget));try{await live(`/projects/${projectId}/${type}`,{method:'POST',body:JSON.stringify(values)});liveSession.user.role==='client'?client(await refreshClient(projectId)):await openProject(projectId);toast('Saved.')}catch(reason){toast(reason.message)}}
-async function reactMoodboard(id,reaction,projectId){try{await live(`/moodboards/${id}/reactions`,{method:'POST',body:JSON.stringify({reaction})});liveSession.user.role==='client'?client(await refreshClient(projectId)):await openProject(projectId);toast('Reaction saved.')}catch(reason){toast(reason.message)}}
-function reviewCalendarView(project,studioView=false){const reviewable=project.files.filter(f=>/^image\//.test(f.mime_type)||f.mime_type==='application/pdf');return `<section class="section"><span class="eyebrow">DESIGN REVIEW</span><h2>Pinned feedback</h2>${project.reviews.map(c=>`<article class="card update ${c.parent_id?'review-reply':''}"><time>${c.parent_id?'REPLY · ':''}${esc(c.file_name)} · PAGE ${c.page_number}${c.pin_x!==null?` · ${Math.round(c.pin_x)}%, ${Math.round(c.pin_y)}%`:''}</time><h3>${esc(c.author_name)}</h3><p>${esc(c.body)}</p><div class="actions"><button class="btn alt" onclick="replyDesignComment('${esc(c.id)}','${esc(c.file_id)}','${c.page_number}','${esc(project.id)}')">REPLY</button>${c.resolved_at?'<span class="status">RESOLVED</span>':studioView?`<button class="btn alt" onclick="resolveDesignComment('${esc(c.id)}','${esc(project.id)}')">RESOLVE</button>`:''}</div></article>`).join('')||empty()}${reviewable.length?`<form class="card editor-form" onsubmit="addDesignComment(event,'${esc(project.id)}')"><label>Review file<select name="fileId">${reviewable.map(f=>`<option value="${esc(f.id)}">${esc(f.file_name)}</option>`).join('')}</select></label><div class="form-split"><label>Page<input name="pageNumber" type="number" min="1" value="1"></label><label>Pin X %<input name="pinX" type="number" min="0" max="100" value="50"></label><label>Pin Y %<input name="pinY" type="number" min="0" max="100" value="50"></label></div><label>Comment<textarea name="body" required></textarea></label><button class="btn">PIN COMMENT →</button></form>`:''}</section><section class="section"><span class="eyebrow">CONTENT CALENDAR</span><h2>Monthly content</h2><div class="calendar-grid">${project.posts.map(post=>`<article class="card asset-card"><span class="eyebrow">${esc(post.publish_at.slice(0,10))} · ${esc(post.channel)}</span><h3>${esc(post.title)}</h3><p>${esc(post.caption||'')}</p><span class="status">${esc(stateTitle(post.status))}</span>${!studioView&&post.status==='in_review'?`<div class="actions"><button class="btn alt" onclick="contentFeedback('${esc(post.id)}','changes_requested','${esc(project.id)}')">CHANGES</button><button class="btn" onclick="contentFeedback('${esc(post.id)}','approved','${esc(project.id)}')">APPROVE</button></div>`:''}</article>`).join('')||empty()}</div>${studioView?`<form class="card editor-form" onsubmit="createContentPost(event,'${esc(project.id)}')"><label>Post title<input name="title" required></label><div class="form-split"><label>Channel<input name="channel" required placeholder="Instagram"></label><label>Publish date<input name="publishAt" type="datetime-local" required></label></div><label>Caption<textarea name="caption"></textarea></label><label class="check-row"><input name="sendForApproval" type="checkbox" checked> Send for client approval</label><button class="btn">ADD TO CALENDAR →</button></form>`:''}</section>`}
-const renderClientWithCollaboration=client;client=function(project){renderClientWithCollaboration(project);$('.screen').insertAdjacentHTML('beforeend',reviewCalendarView(project,false))}
-const renderEditorWithCollaboration=projectEditor;projectEditor=function(project){renderEditorWithCollaboration(project);$('.screen').insertAdjacentHTML('beforeend',reviewCalendarView(project,true))}
-async function addDesignComment(event,projectId){event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget));try{await live(`/projects/${projectId}/reviews`,{method:'POST',body:JSON.stringify(values)});liveSession.user.role==='client'?client(await refreshClient(projectId)):await openProject(projectId);toast('Comment pinned.')}catch(reason){toast(reason.message)}}
-async function replyDesignComment(parentId,fileId,pageNumber,projectId){const body=prompt('Write your reply');if(!body?.trim())return;try{await live(`/projects/${projectId}/reviews`,{method:'POST',body:JSON.stringify({parentId,fileId,pageNumber,body})});liveSession.user.role==='client'?client(await refreshClient(projectId)):await openProject(projectId);toast('Reply posted.')}catch(reason){toast(reason.message)}}
-async function resolveDesignComment(id,projectId){try{await live(`/design-comments/${id}/resolve`,{method:'PATCH',body:'{}'});await openProject(projectId);toast('Comment resolved.')}catch(reason){toast(reason.message)}}
-async function createContentPost(event,projectId){event.preventDefault();const form=event.currentTarget,values=Object.fromEntries(new FormData(form));values.sendForApproval=form.elements.sendForApproval.checked;try{await live(`/projects/${projectId}/content-posts`,{method:'POST',body:JSON.stringify(values)});await openProject(projectId);toast('Content post created.')}catch(reason){toast(reason.message)}}
-async function contentFeedback(id,decision,projectId){const comment=decision==='changes_requested'?prompt('What should change?',''):'';if(decision==='changes_requested'&&!comment)return;try{await live(`/content-posts/${id}/feedback`,{method:'POST',body:JSON.stringify({decision,comment})});client(await refreshClient(projectId));toast(decision==='approved'?'Post approved.':'Changes requested.')}catch(reason){toast(reason.message)}}
-const renderClientWithReview=client;client=function(project){renderClientWithReview(project);$('.screen').insertAdjacentHTML('beforeend',`<section class="section"><span class="eyebrow">STUDIO ANNOUNCEMENTS</span><h2>From The Fourth Wall</h2>${project.announcements.map(a=>`<article class="card update"><time>${formatDate(a.published_at)}</time><h3>${esc(a.title)}</h3><p>${esc(a.body)}</p></article>`).join('')||empty()}</section>${project.onboarding.intake?'':`<section class="section"><span class="eyebrow">CLIENT INTAKE</span><h2>Help us understand your brand.</h2><form class="card editor-form" onsubmit="submitIntake(event,'${esc(project.id)}')"><label>Primary audience<textarea name="audience" required></textarea></label><label>Goals<textarea name="goals" required></textarea></label><label>Brands you admire<textarea name="inspiration"></textarea></label><button class="btn">SUBMIT QUESTIONNAIRE →</button></form></section>`}<button class="btn alt" onclick="openNotificationSettings()">NOTIFICATION SETTINGS</button>`)}
-async function submitIntake(event,projectId){event.preventDefault();const answers=Object.fromEntries(new FormData(event.currentTarget));try{await live(`/projects/${projectId}/onboarding`,{method:'POST',body:JSON.stringify({answers})});client(await refreshClient(projectId));toast('Questionnaire submitted.')}catch(reason){toast(reason.message)}}
-async function openNotificationSettings(){try{const result=await live('/settings/notifications'),p=result.preferences,d=document.createElement('dialog');d.innerHTML=`<form class="modal editor-form" id="notificationForm"><button class="close" type="button" onclick="this.closest('dialog').close()">×</button><h2>Notifications</h2>${[['emailUpdates','Email project updates',p.email_updates],['weeklyDigest','Weekly email digest',p.weekly_digest],['messageAlerts','New messages',p.message_alerts],['approvalAlerts','Approval requests',p.approval_alerts]].map(([name,label,value])=>`<label class="check-row"><input name="${name}" type="checkbox" ${value?'checked':''}> ${label}</label>`).join('')}<button class="btn">SAVE PREFERENCES</button></form>`;document.body.append(d);d.showModal();d.addEventListener('close',()=>d.remove());$('#notificationForm').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,v={};for(const name of ['emailUpdates','weeklyDigest','messageAlerts','approvalAlerts'])v[name]=f.elements[name].checked;await live('/settings/notifications',{method:'PATCH',body:JSON.stringify(v)});d.close();toast('Preferences saved.')}}catch(reason){toast(reason.message)}}
-function insightView(project,studioView=false){return `<section class="section brand-book"><span class="eyebrow">BRAND GUIDELINES</span><h2>Your living brand book.</h2>${project.guidelines.map(g=>`<article class="card guideline"><h3>${esc(g.title)}</h3><p>${esc(g.content)}</p></article>`).join('')||empty()}${studioView?`<form class="card editor-form" onsubmit="createGuideline(event,'${esc(project.id)}')"><input name="title" required placeholder="Guideline chapter"><textarea name="content" required placeholder="Voice, colour, typography or usage guidance"></textarea><button class="btn">ADD CHAPTER</button></form><section class="card timer"><h3>Time tracking</h3><input id="timerDescription" placeholder="What are you working on?"><div class="actions"><button class="btn" onclick="timeAction('${esc(project.id)}','start')">START</button><button class="btn alt" onclick="timeAction('${esc(project.id)}','stop')">STOP</button></div><p>${project.timeEntries.reduce((n,x)=>n+(x.minutes||0),0)} minutes recorded</p></section>`:`<button class="btn alt" onclick="downloadExport('${esc(project.id)}')">EXPORT MY PROJECT ↓</button>${project.status==='Complete'?`<form class="card editor-form" onsubmit="submitTestimonial(event,'${esc(project.id)}')"><h3>Share your experience</h3><label>Rating<select name="rating">${[5,4,3,2,1].map(x=>`<option>${x}</option>`).join('')}</select></label><label>Testimonial<textarea name="quote" required></textarea></label><input name="referralName" placeholder="Referral name (optional)"><input name="referralEmail" type="email" placeholder="Referral email (optional)"><button class="btn">SEND THANKS →</button></form>`:''}`}</section>`}
-const renderClientWithOperations=client;client=function(project){renderClientWithOperations(project);$('.screen').insertAdjacentHTML('beforeend',insightView(project,false))}
-const renderEditorWithOperations=projectEditor;projectEditor=function(project){renderEditorWithOperations(project);const updateForm=$('#updateForm');updateForm?.insertAdjacentHTML('beforeend',`<label>Attachment<select name="attachmentFileId"><option value="">No attachment</option>${project.files.map(f=>`<option value="${esc(f.id)}">${esc(f.file_name)}</option>`).join('')}</select></label><label>Schedule publishing (optional)<input name="scheduledAt" type="datetime-local"></label>`);$('.screen').insertAdjacentHTML('beforeend',insightView(project,true))}
-async function createGuideline(event,projectId){event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget));try{await live(`/projects/${projectId}/guidelines`,{method:'POST',body:JSON.stringify(values)});await openProject(projectId);toast('Brand guideline added.')}catch(reason){toast(reason.message)}}
-async function timeAction(projectId,action){try{await live(`/projects/${projectId}/time-entries`,{method:'POST',body:JSON.stringify({action,description:$('#timerDescription')?.value||''})});await openProject(projectId);toast(action==='start'?'Timer started.':'Timer stopped.')}catch(reason){toast(reason.message)}}
-async function submitTestimonial(event,projectId){event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget));try{await live(`/projects/${projectId}/testimonial`,{method:'POST',body:JSON.stringify(values)});event.currentTarget.remove();toast('Thank you — received.')}catch(reason){toast(reason.message)}}
-const money=(amount,currency='INR')=>new Intl.NumberFormat(data.language||'en-IN',{style:'currency',currency}).format((Number(amount)||0)/100);
-function commercialView(project,studioView=false){return `<section class="section"><span class="eyebrow">INVOICES & PAYMENTS</span><h2>${studioView?'Commercial desk':'Your invoices'}</h2>${project.invoices.map(i=>`<article class="card row"><div><h3>${esc(i.invoice_number)}</h3><p>${money(i.total,i.currency)} · Due ${esc(i.due_date||'on receipt')}</p></div><div><span class="status">${esc(stateTitle(i.status))}</span>${!studioView&&i.status!=='paid'&&i.status!=='void'?`<button class="btn" onclick="payInvoice('${esc(i.id)}')">PAY BY CARD / UPI →</button>`:''}</div></article>`).join('')||empty()}${studioView?`<form class="card editor-form" onsubmit="createInvoice(event,'${esc(project.id)}')"><h3>Create invoice</h3><label>Description<input name="description" required placeholder="Brand identity engagement"></label><div class="form-split"><label>Amount (₹)<input name="amount" type="number" min="1" step="0.01" required></label><label>Tax (₹)<input name="tax" type="number" min="0" step="0.01" value="0"></label><label>Due date<input name="dueDate" type="date"></label></div><label class="check-row"><input name="sendNow" type="checkbox" checked> Send to client</label><button class="btn">CREATE INVOICE →</button></form>`:''}</section><section class="section"><span class="eyebrow">PROPOSALS & CONTRACTS</span><h2>Agreements</h2>${project.proposals.map(p=>`<article class="card row"><div><h3>${esc(p.title)}</h3><p>${money(p.total,p.currency)}</p></div><div><span class="status">${esc(stateTitle(p.status))}</span>${studioView&&p.pdf_file_id&&p.status!=='signed'?`<button class="btn" onclick="sendProposal('${esc(p.id)}','${esc(project.id)}')">SEND FOR E-SIGN →</button>`:''}</div></article>`).join('')||empty()}${studioView?`<form class="card editor-form" onsubmit="createProposal(event,'${esc(project.id)}')"><h3>Build a proposal</h3><label>Title<input name="title" required placeholder="Brand transformation proposal"></label><label>Introduction<textarea name="introduction"></textarea></label><label>Service block<input name="blockTitle" required placeholder="Strategy and identity"></label><label>Block description<textarea name="description"></textarea></label><label>Price (₹)<input name="amount" type="number" min="0" step="0.01" required></label><label>Branded proposal PDF<select name="pdfFileId"><option value="">Attach later</option>${project.files.filter(f=>f.mime_type==='application/pdf').map(f=>`<option value="${esc(f.id)}">${esc(f.file_name)}</option>`).join('')}</select></label><button class="btn">CREATE PROPOSAL →</button></form>`:''}</section><section class="section"><span class="eyebrow">MEETINGS</span><h2>Studio calendar</h2>${project.meetings.map(m=>`<article class="card row"><div><h3>${esc(m.title)}</h3><p>${new Date(m.starts_at).toLocaleString()} · ${m.duration_minutes} min</p></div>${m.join_url?`<a class="btn" href="${esc(m.join_url)}" target="_blank" rel="noopener">JOIN →</a>`:`<span class="status">${esc(stateTitle(m.status))}</span>`}</article>`).join('')||empty()}<form class="card editor-form" onsubmit="bookMeeting(event,'${esc(project.id)}')"><h3>${studioView?'Schedule a client meeting':'Book time with the studio'}</h3><label>Meeting title<input name="title" required value="Project check-in"></label><div class="form-split"><label>Date and time<input name="startsAt" type="datetime-local" required></label><label>Duration<select name="durationMinutes"><option>30</option><option>45</option><option>60</option></select></label></div><button class="btn">BOOK WITH GOOGLE CALENDAR →</button></form></section>`}
-const renderClientWithInsights=client;client=function(project){renderClientWithInsights(project);$('.screen').insertAdjacentHTML('beforeend',commercialView(project,false))}
-const renderEditorWithInsights=projectEditor;projectEditor=function(project){renderEditorWithInsights(project);$('.screen').insertAdjacentHTML('beforeend',commercialView(project,true))}
-async function createInvoice(event,projectId){event.preventDefault();const f=event.currentTarget,v=Object.fromEntries(new FormData(f));try{await live(`/projects/${projectId}/invoices`,{method:'POST',body:JSON.stringify({items:[{description:v.description,quantity:1,unitAmount:Math.round(Number(v.amount)*100)}],tax:Math.round(Number(v.tax||0)*100),dueDate:v.dueDate,sendNow:f.elements.sendNow.checked})});await openProject(projectId);toast('Invoice created.')}catch(reason){toast(reason.message)}}
-async function payInvoice(id){try{const result=await live(`/invoices/${id}/payment-link`,{method:'POST',body:'{}'});if(result.status==='paid')return toast('This invoice is already paid.');location.href=result.url}catch(reason){toast(reason.message)}}
-async function createProposal(event,projectId){event.preventDefault();const v=Object.fromEntries(new FormData(event.currentTarget));try{await live(`/projects/${projectId}/proposals`,{method:'POST',body:JSON.stringify({title:v.title,introduction:v.introduction,pdfFileId:v.pdfFileId,blocks:[{title:v.blockTitle,description:v.description,amount:Math.round(Number(v.amount)*100)}]})});await openProject(projectId);toast('Proposal created.')}catch(reason){toast(reason.message)}}
-async function sendProposal(id,projectId){if(!confirm('Send this PDF to the client through Dropbox Sign?'))return;try{await live(`/proposals/${id}/send-signature`,{method:'POST',body:'{}'});await openProject(projectId);toast('Dropbox Sign request sent.')}catch(reason){toast(reason.message)}}
-async function bookMeeting(event,projectId){event.preventDefault();const v=Object.fromEntries(new FormData(event.currentTarget));try{await live(`/projects/${projectId}/meetings`,{method:'POST',body:JSON.stringify(v)});liveSession.user.role==='client'?client(await refreshClient(projectId)):await openProject(projectId);toast('Meeting booked and invitations sent.')}catch(reason){toast(reason.message)}}
-async function saveProject(event,id){event.preventDefault();const values=Object.fromEntries(new FormData(event.currentTarget));try{await live(`/projects/${id}`,{method:'PATCH',body:JSON.stringify(values)});await refreshStudio();await openProject(id);toast('Project details saved.')}catch(reason){toast(reason.message)}}
-async function addDeliverable(event,id){event.preventDefault();const title=new FormData(event.currentTarget).get('title');try{await live(`/projects/${id}/deliverables`,{method:'POST',body:JSON.stringify({title})});await openProject(id);toast('Deliverable added.')}catch(reason){toast(reason.message)}}
-async function uploadStudioFile(event,id){event.preventDefault();const form=event.currentTarget,file=form.elements.file.files[0],deliverableId=form.elements.deliverableId.value;if(!file)return;if(file.size>26214400){toast('Choose a file smaller than 25 MB.');return}try{const headers={'content-type':file.type,'x-file-name':encodeURIComponent(file.name)};if(deliverableId)headers['x-deliverable-id']=deliverableId;await live(`/projects/${id}/files`,{method:'POST',headers,body:await file.arrayBuffer()});await openProject(id);toast('File uploaded securely.')}catch(reason){toast(reason.message)}}
-async function postProjectUpdate(event,id){event.preventDefault();const form=event.currentTarget,values=Object.fromEntries(new FormData(form));values.requiresApproval=form.elements.requiresApproval.checked;values.visibleToClient=form.elements.visibleToClient.checked;try{await live(`/projects/${id}/updates`,{method:'POST',body:JSON.stringify(values)});await openProject(id);toast('Studio update posted.')}catch(reason){toast(reason.message)}}
-edit=function(){const dialog=document.createElement('dialog');dialog.innerHTML=`<form class="modal editor-form" id="createProjectForm"><button class="close" type="button" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">NEW PROJECT</span><h2>Begin thoughtfully.</h2><label>Project name<input name="name" required maxlength="160" placeholder="Client or engagement name"></label><label>Service<input name="service" required maxlength="160" placeholder="Brand identity, website, campaign…"></label><div class="form-split"><label>Status<select name="status"><option value="planning">Planning</option><option value="active">Active</option><option value="on_hold">On hold</option></select></label><label>Due date<input name="dueDate" type="date"></label></div><label>Starting progress <output id="newProgressValue">0%</output><input name="progress" type="range" min="0" max="100" value="0" oninput="document.querySelector('#newProgressValue').value=this.value+'%'" aria-label="Starting progress"></label><span class="eyebrow">OPTIONAL CLIENT ACCESS</span><label>Client name<input name="displayName" maxlength="160" placeholder="Client name"></label><label>Client email<input name="clientEmail" type="email" placeholder="client@company.com"></label><label>Project access code<input name="accessCode" minlength="6" maxlength="128" autocomplete="new-password" placeholder="At least 6 characters"></label><p class="muted">If you add an email, enter a code and share it privately with the client.</p><button class="btn" id="createProjectButton">CREATE PROJECT →</button></form>`;document.body.append(dialog);dialog.showModal();dialog.addEventListener('close',()=>dialog.remove());$('#createProjectForm').onsubmit=createProject}
-async function createProject(event){event.preventDefault();const form=event.currentTarget,values=Object.fromEntries(new FormData(form)),button=$('#createProjectButton');if((values.clientEmail&&!values.accessCode)||(!values.clientEmail&&values.accessCode)){toast('Add both the client email and access code.');return}button.disabled=true;button.textContent='CREATING…';try{const result=await live('/projects',{method:'POST',body:JSON.stringify({name:values.name,service:values.service,status:values.status,dueDate:values.dueDate||null,progress:Number(values.progress)})});const projectId=result.project.id;if(values.clientEmail)await live(`/projects/${projectId}/client-access`,{method:'POST',body:JSON.stringify({email:values.clientEmail,displayName:values.displayName||values.clientEmail.split('@')[0],code:values.accessCode})});form.closest('dialog').close();await refreshStudio();go('projects');toast(values.clientEmail?'Project created and client access enabled.':'Project created.')}catch(reason){button.disabled=false;button.textContent='CREATE PROJECT →';toast(reason.message)}}
-async function bootLive(){if(liveSession?.user?.role==='client'&&localStorage.tfwProject){try{client(await refreshClient(localStorage.tfwProject));return}catch(_){}}if(liveSession?.user?.role&&liveSession.user.role!=='client'){try{await refreshStudio();desk();return}catch(_){}}login()}
-load();if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');bootLive();
+const LIVE_API = "https://fourthwall.krishikesannn.workers.dev/api";
+let liveSession = JSON.parse(localStorage.getItem("tfw-session") || "null"),
+  clientProjectChoices = [];
+const stateTitle = (value) =>
+  String(value || "planning")
+    .replace("_", " ")
+    .replace(/\b\w/g, (x) => x.toUpperCase());
+const formatDate = (value) =>
+  value
+    ? new Date(value)
+        .toLocaleDateString(undefined, { day: "2-digit", month: "short" })
+        .toUpperCase()
+    : "TODAY";
+const mapProject = (
+  p,
+  deliverables = [],
+  updates = [],
+  files = [],
+  assets = [],
+  workspace = {},
+) => ({
+  id: p.id,
+  name: p.name,
+  service: p.service,
+  status: stateTitle(p.status),
+  due: p.due_date || "To be confirmed",
+  progress: p.progress || 0,
+  deliverables: deliverables.map((d) => (typeof d === "string" ? { title: d } : d)),
+  updates: updates.map((u) => ({
+    date: formatDate(u.created_at),
+    title: u.title,
+    text: u.body,
+    approval: !!u.requires_approval,
+  })),
+  files,
+  assets,
+  milestones: workspace.milestones || [],
+  tasks: workspace.tasks || [],
+  messages: workspace.messages || [],
+  moodboards: workspace.moodboards || [],
+  reviews: workspace.reviews || [],
+  posts: workspace.posts || [],
+  announcements: workspace.announcements || [],
+  onboarding: workspace.onboarding || { items: [], intake: null },
+  guidelines: workspace.guidelines || [],
+  timeEntries: workspace.timeEntries || [],
+  invoices: workspace.invoices || [],
+  proposals: workspace.proposals || [],
+  meetings: workspace.meetings || [],
+  providers: workspace.providers || {},
+});
+const mapLead = (l) => ({
+  id: l.id,
+  name: l.name,
+  company: l.company || "Independent",
+  service: l.service || "Creative partnership",
+  email: l.email,
+  status: stateTitle(l.status),
+});
+const basicHead = head;
+head = function () {
+  return basicHead().replace(
+    '<button class="signout"',
+    `${liveSession?.user?.role === "client" && clientProjectChoices.length > 1 ? `<select class="project-switcher" aria-label="Switch project" onchange="switchClientProject(this.value)">${clientProjectChoices.map((p) => `<option value="${esc(p.id)}" ${String(p.id) === String(localStorage.tfwProject) ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>` : ""}<button class="signout" onclick="openGlobalSearch()" aria-label="Search">Search</button>${liveSession?.user?.role !== "client" ? '<button class="signout" onclick="openLeadPipeline()">Pipeline</button><button class="signout" onclick="openOperations()">Operations</button><button class="signout" onclick="openAnalytics()">Analytics</button>' : ""}<button class="signout" onclick="openAppSettings()">Settings</button><button class="signout"`,
+  );
+};
+async function switchClientProject(id) {
+  localStorage.tfwProject = id;
+  client(await refreshClient(id));
+}
+async function nativeUnlock(force = false) {
+  if (!force && localStorage.tfwBiometric !== "1") return true;
+  const plugin = window.Capacitor?.Plugins?.BiometricAuth;
+  if (!plugin) {
+    if (force) toast("Biometric lock is available in the installed Android app.");
+    return !force;
+  }
+  try {
+    const info = await plugin.checkBiometry();
+    if (!info.isAvailable) throw Error("Biometrics are not available on this phone.");
+    await plugin.authenticate({
+      reason: "Unlock The Fourth Wall",
+      cancelTitle: "Cancel",
+      allowDeviceCredential: true,
+      androidTitle: "Unlock The Fourth Wall",
+      androidSubtitle: "Use biometrics or your device lock",
+    });
+    return true;
+  } catch (error) {
+    toast(error.message || "App unlock was cancelled.");
+    return false;
+  }
+}
+async function openAppSettings() {
+  const d = document.createElement("dialog");
+  d.innerHTML = `<form class="modal editor-form" id="appSettingsForm"><button class="close" type="button" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">APP SETTINGS</span><h2>Make the space yours.</h2><label>Language<select name="language"><option value="en">English</option><option value="hi">हिन्दी</option></select></label><label>Paper theme<select name="theme"><option value="light">Light parchment</option><option value="dark">Evergreen paper</option></select></label><label class="check-row"><input name="biometricLock" type="checkbox" ${localStorage.tfwBiometric === "1" ? "checked" : ""}> Biometric app lock on this device</label><button class="btn">SAVE SETTINGS</button></form>`;
+  document.body.append(d);
+  d.showModal();
+  d.addEventListener("close", () => d.remove());
+  $("#appSettingsForm").onsubmit = async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget,
+      values = {
+        language: form.elements.language.value,
+        theme: form.elements.theme.value,
+        biometricLock: form.elements.biometricLock.checked,
+      };
+    if (values.biometricLock && localStorage.tfwBiometric !== "1" && !(await nativeUnlock(true)))
+      return;
+    await live("/settings/profile", { method: "PATCH", body: JSON.stringify(values) });
+    localStorage.tfwBiometric = values.biometricLock ? "1" : "0";
+    data.theme = values.theme;
+    save();
+    document.body.classList.toggle("dark", values.theme === "dark");
+    d.close();
+    toast("App settings saved.");
+  };
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && liveSession?.token) nativeUnlock();
+});
+async function openGlobalSearch() {
+  const dialog = document.createElement("dialog");
+  dialog.innerHTML = `<section class="modal"><button class="close" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">GLOBAL SEARCH</span><h2>Find anything.</h2><label>Search projects, files and leads<input id="globalQuery" type="search" autocomplete="off" placeholder="Start typing…"></label><div class="list" id="globalResults"></div></section>`;
+  document.body.append(dialog);
+  dialog.showModal();
+  const input = $("#globalQuery"),
+    results = $("#globalResults");
+  let timer;
+  input.oninput = () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      if (input.value.trim().length < 2) {
+        results.innerHTML = "";
+        return;
+      }
+      try {
+        const response = await live(`/search?q=${encodeURIComponent(input.value)}`);
+        results.innerHTML =
+          response.results
+            .map(
+              (item) =>
+                `<article class="card row"><div><h3>${esc(item.title)}</h3><p>${esc(stateTitle(item.type))} · ${esc(item.subtitle || "")}</p></div></article>`,
+            )
+            .join("") || empty();
+      } catch (reason) {
+        results.innerHTML = `<p class="error">${esc(reason.message)}</p>`;
+      }
+    }, 250);
+  };
+  dialog.addEventListener("close", () => dialog.remove());
+  input.focus();
+}
+async function openOperations() {
+  try {
+    const data = await live("/operations"),
+      dialog = document.createElement("dialog");
+    dialog.innerHTML = `<section class="modal operations"><button class="close" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">STUDIO OPERATIONS</span><h2>People and systems.</h2><div class="metrics"><article class="card metric"><span>CONTACTS</span><strong>${data.contacts.length}</strong></article><article class="card metric"><span>TEAM</span><strong>${data.team.length}</strong></article><article class="card metric"><span>FOLLOW-UPS</span><strong>${data.leadActivities.filter((x) => x.follow_up_at).length}</strong></article></div><section class="section"><h3>Client CRM</h3>${data.contacts.map((c) => `<article class="card row"><div><b>${esc(c.name)}</b><p>${esc(c.company || c.email)}${c.renewal_at ? " · Renewal " + esc(c.renewal_at) : ""}</p></div></article>`).join("") || empty()}<form class="editor-form" onsubmit="createOperation(event,'contacts')"><input name="name" required placeholder="Contact name"><input name="email" type="email" required placeholder="Email"><input name="company" placeholder="Company"><input name="renewalAt" type="date"><button class="btn">ADD CONTACT</button></form></section><section class="section"><h3>Update templates</h3>${data.templates.map((t) => `<article class="card update"><h3>${esc(t.name)}</h3><p>${esc(t.title)}</p></article>`).join("") || empty()}<form class="editor-form" onsubmit="createOperation(event,'update-templates')"><input name="name" required placeholder="Template name"><input name="title" required placeholder="Update title"><textarea name="body" required placeholder="Reusable update text"></textarea><button class="btn">SAVE TEMPLATE</button></form></section><section class="section"><h3>Broadcast</h3><form class="editor-form" onsubmit="createOperation(event,'announcements')"><input name="title" required placeholder="Announcement title"><textarea name="body" required placeholder="Message to active clients"></textarea><button class="btn">PUBLISH</button></form></section></section>`;
+    document.body.append(dialog);
+    dialog.showModal();
+    dialog.addEventListener("close", () => dialog.remove());
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function createOperation(event, path) {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await live(`/` + path, { method: "POST", body: JSON.stringify(values) });
+    event.currentTarget.reset();
+    toast("Saved.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function openAnalytics() {
+  try {
+    const value = await live("/analytics"),
+      d = document.createElement("dialog");
+    const total = value.leads.reduce((n, x) => n + x.total, 0),
+      won = value.leads.reduce((n, x) => n + x.closed, 0);
+    d.innerHTML = `<section class="modal"><button class="close" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">STUDIO ANALYTICS</span><h2>What the work reveals.</h2><div class="metrics"><article class="card metric"><span>LEADS</span><strong>${total}</strong></article><article class="card metric"><span>WIN RATE</span><strong>${total ? Math.round((won / total) * 100) : 0}%</strong></article><article class="card metric"><span>OVERDUE</span><strong>${value.overdue}</strong></article></div><section class="section"><h3>Revenue-ready service mix</h3>${value.projects.map((x) => `<article class="card row"><div><b>${esc(x.service)}</b><p>${x.projects} projects · ${Math.round(x.avg_days || 0)} avg days</p></div></article>`).join("") || empty()}</section><section class="section"><h3>Tracked time</h3>${value.time.map((x) => `<article class="card row"><b>${esc(x.name)}</b><span>${Math.round((x.minutes / 60) * 10) / 10} h</span></article>`).join("") || empty()}</section><button class="btn" onclick="downloadExport()">EXPORT CRM DATA ↓</button></section>`;
+    document.body.append(d);
+    d.showModal();
+    d.addEventListener("close", () => d.remove());
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+function openLeadPipeline() {
+  const d = document.createElement("dialog"),
+    stages = ["New", "Contacted", "Qualified", "Closed"];
+  d.innerHTML = `<section class="modal pipeline-modal"><button class="close" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">LEAD PIPELINE</span><h2>Conversations in motion.</h2><div class="pipeline">${stages
+    .map(
+      (stage) =>
+        `<section class="pipeline-stage" data-stage="${stage}" ondragover="event.preventDefault()" ondrop="dropLead(event,'${stage}')"><h3>${stage}</h3>${data.leads
+          .filter((l) => l.status === stage)
+          .map(
+            (l) =>
+              `<article class="card" draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${esc(l.id)}')"><b>${esc(l.name)}</b><p>${esc(l.company)}</p><button class="signout" onclick="addLeadNote('${esc(l.id)}')">Note / follow-up</button></article>`,
+          )
+          .join("")}</section>`,
+    )
+    .join("")}</div></section>`;
+  document.body.append(d);
+  d.showModal();
+  d.addEventListener("close", () => d.remove());
+}
+async function dropLead(event, next) {
+  const id = event.dataTransfer.getData("text/plain");
+  await status(id, next);
+  event.currentTarget.closest("dialog").close();
+  openLeadPipeline();
+}
+async function addLeadNote(id) {
+  const note = prompt("Add a note or follow-up detail:", "");
+  if (!note) return;
+  try {
+    await live(`/inquiries/${id}/activities`, {
+      method: "POST",
+      body: JSON.stringify({ kind: "follow_up", note }),
+    });
+    toast("Lead activity saved.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function downloadExport(projectId = "") {
+  try {
+    const response = await fetch(
+      `${LIVE_API}/export${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`,
+      { headers: { authorization: `Bearer ${liveSession.token}` } },
+    );
+    if (!response.ok) throw Error("Export failed.");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(await response.blob());
+    a.download = "fourth-wall-export.json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+const bytesLabel = (value) =>
+  value >= 1048576
+    ? `${(value / 1048576).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(value / 1024))} KB`;
+function fileList(files) {
+  return files.length
+    ? `<div class="list">${files.map((file) => `<button class="card row project-row" onclick="downloadProjectFile('${esc(file.id)}','${esc(file.file_name)}')"><div><h3>${esc(file.file_name)}</h3><p>${file.deliverable_id ? `Version ${file.version} · ` : ""}${bytesLabel(file.size_bytes)} · ${esc(file.uploaded_by)}</p></div><span class="status">DOWNLOAD ↓</span></button>`).join("")}</div>`
+    : empty();
+}
+function assetList(assets) {
+  return assets.length
+    ? `<div class="asset-grid">${assets.map((asset) => `<article class="card asset-card"><span class="eyebrow">${esc(asset.kind)} · V${asset.version}</span><h3>${esc(asset.name)}</h3>${asset.kind === "color" ? `<button class="token" style="--token:${esc(asset.token_value)}" onclick="copyToken('${esc(asset.token_value)}')"><i></i><span>${esc(asset.token_value)}</span> COPY</button>` : `<button class="btn alt" onclick="downloadProjectFile('${esc(asset.file_id)}','${esc(asset.file_name)}')">DOWNLOAD ↓</button>`}</article>`).join("")}</div>`
+    : empty();
+}
+async function copyToken(value) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast("Colour token copied.");
+  } catch (_) {
+    toast(value);
+  }
+}
+async function uploadProjectFile(event, projectId) {
+  event.preventDefault();
+  const input = event.currentTarget.elements.file,
+    file = input.files[0];
+  if (!file) return;
+  if (file.size > 26214400) {
+    toast("Choose a file smaller than 25 MB.");
+    return;
+  }
+  try {
+    await live(`/projects/${projectId}/files`, {
+      method: "POST",
+      headers: { "content-type": file.type, "x-file-name": encodeURIComponent(file.name) },
+      body: await file.arrayBuffer(),
+    });
+    toast("File uploaded securely.");
+    if (liveSession.user.role === "client") client(await refreshClient(projectId));
+    else await openProject(projectId);
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function downloadProjectFile(id, name) {
+  try {
+    let response = await fetch(`${LIVE_API}/files/${id}/download`, {
+      headers: { authorization: `Bearer ${liveSession.token}` },
+    });
+    if (!response.ok)
+      throw Error((await response.json().catch(() => ({}))).error || "Download failed.");
+    let link = document.createElement("a");
+    link.href = URL.createObjectURL(await response.blob());
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function reviewDeliverable(id, decision) {
+  const typedSignature =
+    decision === "approved" ? prompt("Type your name to approve this deliverable:", "") : "";
+  if (decision === "approved" && !typedSignature) return;
+  const note = decision === "changes_requested" ? prompt("What should the studio change?", "") : "";
+  if (decision === "changes_requested" && !note) return;
+  try {
+    await live(`/deliverables/${id}/approvals`, {
+      method: "POST",
+      body: JSON.stringify({ decision, typedSignature, note }),
+    });
+    client(await refreshClient(localStorage.tfwProject));
+    toast(decision === "approved" ? "Approved with timestamp." : "Changes requested.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+const readOfflineQueue = () => JSON.parse(localStorage.getItem("tfw-offline-queue") || "[]");
+function addOfflineMutation(path, options) {
+  const queue = readOfflineQueue();
+  queue.push({
+    id: crypto.randomUUID(),
+    path,
+    method: options.method,
+    body: options.body,
+    createdAt: new Date().toISOString(),
+  });
+  localStorage.setItem("tfw-offline-queue", JSON.stringify(queue));
+  toast("Saved offline — it will sync automatically.");
+  return { queued: true };
+}
+async function syncOfflineQueue() {
+  if (!navigator.onLine || !liveSession?.token) return;
+  const queue = readOfflineQueue(),
+    remaining = [];
+  for (const item of queue) {
+    try {
+      await live(item.path, { method: item.method, body: item.body });
+    } catch (_) {
+      remaining.push(item);
+    }
+  }
+  localStorage.setItem("tfw-offline-queue", JSON.stringify(remaining));
+  if (queue.length && !remaining.length) toast("Offline changes synced.");
+}
+async function live(path, options = {}) {
+  let headers = { ...(options.headers || {}) };
+  if (
+    options.body &&
+    !headers["content-type"] &&
+    !(options.body instanceof ArrayBuffer) &&
+    !(options.body instanceof Blob)
+  )
+    headers["content-type"] = "application/json";
+  if (liveSession?.token) headers.authorization = `Bearer ${liveSession.token}`;
+  let response;
+  try {
+    response = await fetch(`${LIVE_API}${path}`, { ...options, headers });
+  } catch (error) {
+    const queueable =
+      /^(POST|PATCH)$/.test(options.method || "") &&
+      !path.startsWith("/auth/") &&
+      !path.endsWith("/files");
+    if ((options.queueOnFail || queueable) && typeof options.body === "string")
+      return addOfflineMutation(path, options);
+    throw error;
+  }
+  let result = await response.json().catch(() => ({}));
+  if (!response.ok)
+    throw Error(result.error || "The studio service could not complete that request.");
+  return result;
+}
+window.addEventListener("online", syncOfflineQueue);
+function storeSession(next) {
+  liveSession = next;
+  localStorage.setItem("tfw-session", JSON.stringify(next));
+}
+async function refreshStudio() {
+  let [projects, inquiries] = await Promise.all([live("/projects"), live("/inquiries")]);
+  data.projects = projects.projects.map((p) => mapProject(p));
+  data.leads = inquiries.inquiries.map(mapLead);
+  save();
+}
+async function refreshClient(projectId) {
+  if (!clientProjectChoices.length) {
+    const choices = await live("/projects");
+    clientProjectChoices = choices.projects.map((p) => ({ id: p.id, name: p.name }));
+  }
+  let [
+      detail,
+      updates,
+      files,
+      assets,
+      workspace,
+      reviews,
+      calendar,
+      announcements,
+      onboarding,
+      insights,
+      commercial,
+    ] = await Promise.all([
+      live(`/projects/${projectId}`),
+      live(`/projects/${projectId}/updates`),
+      live(`/projects/${projectId}/files`),
+      live(`/projects/${projectId}/brand-assets`),
+      live(`/projects/${projectId}/workspace`),
+      live(`/projects/${projectId}/reviews`),
+      live(`/projects/${projectId}/content-posts`),
+      live("/announcements"),
+      live(`/projects/${projectId}/onboarding`),
+      live(`/projects/${projectId}/insights`),
+      live(`/projects/${projectId}/commercial`).catch(() => ({
+        invoices: [],
+        proposals: [],
+        meetings: [],
+        providers: {},
+      })),
+    ]),
+    project = mapProject(
+      detail.project,
+      detail.deliverables,
+      updates.updates,
+      files.files,
+      assets.assets,
+      {
+        ...workspace,
+        reviews: reviews.comments,
+        posts: calendar.posts,
+        announcements: announcements.announcements,
+        onboarding,
+        ...insights,
+        ...commercial,
+      },
+    );
+  data.projects = [project];
+  save();
+  return project;
+}
+login = function () {
+  app.innerHTML = `<main class="screen login"><div class="mark">◫ THE FOURTH WALL</div><span class="eyebrow">EDITORIAL STUDIO APP</span><h1>Your work,<br>within reach.</h1><p class="muted">A quiet space for beautiful work in progress.</p><div class="switch"><button class="${mode === "client" ? "on" : ""}" data-mode="client">Client Space</button><button class="${mode === "studio" ? "on" : ""}" data-mode="studio">Studio Desk</button></div><form id="loginForm">${mode === "client" ? `<label>Email<input name="email" type="email" required placeholder="you@yourbrand.com"></label><label>Project access code<input name="code" required placeholder="Provided by your studio"></label>` : `<label>Studio email<input name="email" type="email" required placeholder="you@yourstudio.com"></label><label>Password<input name="password" type="password" required placeholder="••••••••"></label>`}<p class="error" id="error"></p><button class="btn" id="loginButton">${mode === "client" ? "VIEW MY PROJECT" : "ENTER STUDIO DESK"} →</button></form><p class="hint">${mode === "client" ? "Ask your studio for a project access code." : "Use your studio owner or member account."}</p></main>`;
+  document.querySelectorAll("[data-mode]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        mode = b.dataset.mode;
+        login();
+      }),
+  );
+  $("#loginForm").onsubmit = async (e) => {
+    e.preventDefault();
+    let form = Object.fromEntries(new FormData(e.target)),
+      error = $("#error"),
+      button = $("#loginButton");
+    error.textContent = "";
+    button.disabled = true;
+    button.textContent = "OPENING…";
+    try {
+      if (mode === "studio") {
+        let result = await live("/auth/login", { method: "POST", body: JSON.stringify(form) });
+        storeSession(result);
+        await refreshStudio();
+        localStorage.tfwRole = "studio";
+        desk();
+      } else {
+        let result = await live("/auth/client-login", {
+          method: "POST",
+          body: JSON.stringify(form),
+        });
+        storeSession(result);
+        let project = await refreshClient(result.projectId);
+        localStorage.tfwRole = "client";
+        localStorage.tfwProject = project.id;
+        client(project);
+      }
+    } catch (reason) {
+      error.textContent = reason.message;
+      button.disabled = false;
+      button.textContent = mode === "client" ? "VIEW MY PROJECT →" : "ENTER STUDIO DESK →";
+    }
+  };
+};
+signout = async function () {
+  try {
+    await live("/auth/logout", { method: "POST", body: "{}" });
+  } catch (_) {}
+  liveSession = null;
+  localStorage.removeItem("tfw-session");
+  localStorage.removeItem("tfwRole");
+  localStorage.removeItem("tfwProject");
+  login();
+};
+overview = function () {
+  let active = data.projects.filter((p) => p.status === "Active").length,
+    newL = data.leads.filter((l) => l.status === "New").length;
+  return `<section class="hero"><span class="eyebrow">STUDIO DESK · <button style="border:0;background:none;color:inherit" onclick="toggleTheme()">${data.theme === "light" ? "DARK PAPER" : "LIGHT PAPER"}</button></span><h1>Good morning.</h1><p class="muted">The calm before the next great thing.</p></section><div class="metrics"><article class="card metric"><span>NEW LEADS</span><strong>${newL}</strong></article><article class="card metric"><span>ACTIVE WORK</span><strong>${active}</strong></article><article class="card metric"><span>TOTAL LEADS</span><strong>${data.leads.length}</strong></article></div><div class="desktop-grid"><section class="section"><span class="eyebrow">PROJECTS</span><h2>Studio pulse</h2>${
+    data.projects
+      .slice(0, 2)
+      .map(
+        (p) =>
+          `<article class="card update"><time>${esc(p.status)}</time><h3>${esc(p.name)}</h3><p>${p.progress}% complete · ${esc(p.service)}</p></article>`,
+      )
+      .join("") || empty()
+  }</section><section class="section"><span class="eyebrow">NEW INQUIRIES</span><h2>Waiting for you</h2>${
+    data.leads
+      .filter((l) => l.status === "New")
+      .map((l) => lead(l))
+      .join("") || empty()
+  }</section></div>`;
+};
+status = async function (id, next) {
+  let lead = data.leads.find((l) => l.id == id),
+    previous = lead?.status;
+  if (!lead) return;
+  lead.status = next;
+  renderDesk();
+  try {
+    await live(`/inquiries/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: next.toLowerCase() }),
+    });
+    save();
+    toast("Lead status updated.");
+  } catch (reason) {
+    lead.status = previous;
+    renderDesk();
+    toast(reason.message);
+  }
+};
+lead = function (l) {
+  return `<article class="card row"><div><h3>${esc(l.name)} · ${esc(l.company)}</h3><p>${esc(l.service)} · ${esc(l.email)}</p></div><select aria-label="Lead status" onchange="status('${esc(l.id)}',this.value)">${["New", "Contacted", "Qualified", "Closed"].map((x) => `<option ${x === l.status ? "selected" : ""}>${x}</option>`).join("")}</select></article>`;
+};
+projects = function () {
+  return `<section class="hero"><span class="eyebrow">DELIVERY BOARD</span><h1>Work in motion.</h1><p class="muted">Open a project to update its client-facing delivery space.</p></section><div class="list">${data.projects.map((p) => `<button class="card row project-row" onclick="openProject('${esc(p.id)}')"><div><h3>${esc(p.name)}</h3><p>${esc(p.service)} · ${p.progress}% complete</p></div><span class="status">${esc(p.status)} →</span></button>`).join("") || empty()}</div>`;
+};
+async function openProject(id) {
+  try {
+    const [detail, updates, files, assets, workspace, reviews, calendar, insights, commercial] =
+      await Promise.all([
+        live(`/projects/${id}`),
+        live(`/projects/${id}/updates`),
+        live(`/projects/${id}/files`),
+        live(`/projects/${id}/brand-assets`),
+        live(`/projects/${id}/workspace`),
+        live(`/projects/${id}/reviews`),
+        live(`/projects/${id}/content-posts`),
+        live(`/projects/${id}/insights`),
+        live(`/projects/${id}/commercial`).catch(() => ({
+          invoices: [],
+          proposals: [],
+          meetings: [],
+          providers: {},
+        })),
+      ]);
+    projectEditor(
+      mapProject(detail.project, detail.deliverables, updates.updates, files.files, assets.assets, {
+        ...workspace,
+        reviews: reviews.comments,
+        posts: calendar.posts,
+        ...insights,
+        ...commercial,
+      }),
+    );
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+function projectEditor(project) {
+  const status = String(project.status).toLowerCase().replaceAll(" ", "_");
+  app.innerHTML = `<main class="screen">${head()}<button class="back-link" onclick="go('projects')">← Back to projects</button><section class="hero editor-hero"><span class="eyebrow">PROJECT DELIVERY</span><h1>${esc(project.name)}</h1><p class="muted">Changes here appear in the client project space.</p></section><form class="card editor-form" id="projectSettings"><span class="eyebrow">PROJECT DETAILS</span><label>Project name<input name="name" required value="${esc(project.name)}"></label><label>Service<input name="service" required value="${esc(project.service)}"></label><div class="form-split"><label>Status<select name="status">${["planning", "active", "complete", "on_hold"].map((value) => `<option value="${value}" ${value === status ? "selected" : ""}>${esc(stateTitle(value))}</option>`).join("")}</select></label><label>Due date<input name="dueDate" type="date" value="${esc(project.due === "To be confirmed" ? "" : project.due)}"></label></div><label>Progress <output id="progressValue">${project.progress}%</output><input name="progress" type="range" min="0" max="100" value="${project.progress}" oninput="document.querySelector('#progressValue').value=this.value+'%'" aria-label="Project progress"></label><button class="btn">SAVE PROJECT →</button></form><section class="section"><span class="eyebrow">DELIVERABLES</span><h2>What the client will receive</h2><div class="deliverables">${project.deliverables.length ? project.deliverables.map((item) => `<div class="card deliverable"><span class="tick">✦</span><div><b>${esc(item.title)}</b><small>${esc(stateTitle(item.status || "draft"))}</small></div></div>`).join("") : empty()}</div><form class="inline-form" id="deliverableForm"><input name="title" required maxlength="180" placeholder="Add a deliverable"><button class="btn">ADD</button></form></section><section class="section"><span class="eyebrow">SHARED FILES</span><h2>Client and studio files</h2>${fileList(project.files || [])}<form class="card editor-form" id="fileForm"><label>Upload JPG, PNG, WebP, PDF, or ZIP (25 MB max)<input name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,application/zip" required></label><label>Attach to deliverable (optional)<select name="deliverableId"><option value="">General project file</option>${project.deliverables.map((item) => `<option value="${esc(item.id)}">${esc(item.title)}</option>`).join("")}</select></label><button class="btn">UPLOAD FILE →</button></form></section><section class="section"><span class="eyebrow">STUDIO UPDATE</span><h2>Share progress</h2><form class="card editor-form" id="updateForm"><label>Update title<input name="title" maxlength="160" placeholder="Design direction ready for review"></label><label>Update text<textarea name="body" required maxlength="5000" rows="4" placeholder="What should the client know?"></textarea></label><label class="check-row"><input name="requiresApproval" type="checkbox"> Ask the client to approve this update</label><label class="check-row"><input name="visibleToClient" type="checkbox" checked> Visible to the client</label><button class="btn">POST UPDATE →</button></form></section></main>`;
+  $("#projectSettings").onsubmit = (event) => saveProject(event, project.id);
+  $("#deliverableForm").onsubmit = (event) => addDeliverable(event, project.id);
+  $("#fileForm").onsubmit = (event) => uploadStudioFile(event, project.id);
+  $("#updateForm").onsubmit = (event) => postProjectUpdate(event, project.id);
+}
+const renderClientCore = client;
+client = function (project) {
+  renderClientCore(project);
+  const section = document.createElement("section");
+  section.className = "section";
+  section.innerHTML = `<span class="eyebrow">BRAND ASSET LIBRARY</span><h2>Your brand, organised.</h2>${assetList(project.assets || [])}`;
+  const screen = $(".screen"),
+    action = screen.lastElementChild;
+  screen.insertBefore(section, action);
+};
+const renderProjectEditorCore = projectEditor;
+projectEditor = function (project) {
+  renderProjectEditorCore(project);
+  const section = document.createElement("section");
+  section.className = "section";
+  section.innerHTML = `<span class="eyebrow">BRAND ASSET LIBRARY</span><h2>Latest and archived versions</h2>${assetList(project.assets || [])}<form class="card editor-form" id="assetForm"><label>Asset type<select name="kind"><option value="logo">Logo</option><option value="font">Font</option><option value="color">Colour token</option><option value="template">Template</option></select></label><label>Asset name<input name="name" required maxlength="160" placeholder="Primary evergreen"></label><label>Colour value (for colour tokens)<input name="tokenValue" maxlength="500" placeholder="#0E3832"></label><label>File (logos, fonts, templates)<input name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,application/zip"></label><button class="btn">ADD NEW VERSION →</button></form>`;
+  $(".screen").append(section);
+  $("#assetForm").onsubmit = (event) => createBrandAsset(event, project.id);
+};
+async function createBrandAsset(event, projectId) {
+  event.preventDefault();
+  const form = event.currentTarget,
+    values = Object.fromEntries(new FormData(form)),
+    file = form.elements.file.files[0];
+  try {
+    let fileId = null;
+    if (values.kind !== "color") {
+      if (!file) throw Error("Choose a file for this asset.");
+      const uploaded = await live(`/projects/${projectId}/files`, {
+        method: "POST",
+        headers: { "content-type": file.type, "x-file-name": encodeURIComponent(file.name) },
+        body: await file.arrayBuffer(),
+      });
+      fileId = uploaded.file.id;
+    }
+    await live(`/projects/${projectId}/brand-assets`, {
+      method: "POST",
+      body: JSON.stringify({
+        kind: values.kind,
+        name: values.name,
+        tokenValue: values.tokenValue,
+        fileId,
+      }),
+    });
+    await openProject(projectId);
+    toast("Brand asset version added.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+function collaborationView(project, studioView = false) {
+  const fileOptions = project.files
+    .map((file) => `<option value="${esc(file.id)}">${esc(file.file_name)}</option>`)
+    .join("");
+  const milestones = project.milestones.length
+    ? project.milestones
+        .map(
+          (milestone) =>
+            `<article class="card row"><div><h3>${esc(milestone.title)}</h3><p>${esc(milestone.due_date || "Date to be confirmed")}</p></div>${milestone.waiting_on ? `<span class="status">WAITING ON ${esc(milestone.waiting_on.toUpperCase())}</span>` : ""}</article>`,
+        )
+        .join("")
+    : empty();
+  const messages = project.messages.length
+    ? project.messages
+        .map(
+          (message) =>
+            `<article class="card update"><time>${formatDate(message.created_at)}</time><h3>${esc(message.sender_name)}</h3><p>${esc(message.body)}</p>${message.file_name ? `<button class="btn alt" onclick="downloadProjectFile('${esc(message.file_id)}','${esc(message.file_name)}')">${esc(message.file_name)} ↓</button>` : ""}${message.sender_id === liveSession?.user?.id && message.read_by ? `<small>Read by ${esc(message.read_by)}</small>` : ""}</article>`,
+        )
+        .join("")
+    : empty();
+  const moodboards = project.moodboards.length
+    ? project.moodboards
+        .map(
+          (board) =>
+            `<article class="card update"><h3>${esc(board.title)}</h3><p>${esc(board.note || "")}</p><div class="actions">${["love", "consider", "pass"].map((reaction) => `<button class="btn ${board.reaction === reaction ? "" : "alt"}" onclick="reactMoodboard('${esc(board.id)}','${reaction}','${esc(project.id)}')">${reaction}</button>`).join("")}</div></article>`,
+        )
+        .join("")
+    : empty();
+  const tasks = project.tasks.length
+    ? project.tasks
+        .map(
+          (task) =>
+            `<article class="card row"><div><h3>${esc(task.title)}</h3><p>${esc(stateTitle(task.status))}${task.assignee_name ? ` · ${esc(task.assignee_name)}` : ""}${task.due_date ? ` · ${esc(task.due_date)}` : ""}</p></div>${task.waiting_on_client ? '<span class="status">WAITING ON CLIENT</span>' : ""}</article>`,
+        )
+        .join("")
+    : empty();
+  return `<section class="section"><span class="eyebrow">PROJECT TIMELINE</span><h2>Milestones</h2>${milestones}${studioView ? `<form class="card editor-form" onsubmit="createCollaboration(event,'${esc(project.id)}','milestones')"><input name="title" required placeholder="Add milestone"><div class="form-split"><input name="dueDate" type="date"><select name="waitingOn"><option value="">Waiting on nobody</option><option value="client">Waiting on client</option><option value="studio">Waiting on studio</option></select></div><button class="btn">ADD MILESTONE</button></form>` : ""}</section><section class="section"><span class="eyebrow">MESSAGES</span><h2>Project conversation</h2><div class="timeline">${messages}</div><form class="card editor-form" onsubmit="createCollaboration(event,'${esc(project.id)}','messages')"><input name="body" required maxlength="5000" placeholder="Write a message"><label>Attach a shared file (optional)<select name="fileId"><option value="">No attachment</option>${fileOptions}</select></label><button class="btn">SEND MESSAGE</button></form></section><section class="section"><span class="eyebrow">CONCEPT BOARDS</span><h2>Moodboard reactions</h2>${moodboards}${studioView ? `<form class="card editor-form" onsubmit="createCollaboration(event,'${esc(project.id)}','moodboards')"><input name="title" required placeholder="Concept board title"><select name="fileId" required><option value="">Choose a shared file</option>${fileOptions}</select><textarea name="note" placeholder="Direction or context"></textarea><button class="btn">ADD CONCEPT BOARD</button></form>` : ""}</section>${studioView ? `<section class="section"><span class="eyebrow">STUDIO TASKS</span><h2>Delivery checklist</h2>${tasks}<form class="card editor-form" onsubmit="createCollaboration(event,'${esc(project.id)}','tasks')"><input name="title" required placeholder="Add studio task"><div class="form-split"><input name="dueDate" type="date"><label class="check-row"><input name="waitingOnClient" type="checkbox"> Waiting on client</label></div><button class="btn">ADD TASK</button></form></section>` : ""}`;
+}
+const renderClientWithAssets = client;
+client = function (project) {
+  renderClientWithAssets(project);
+  $(".screen").insertAdjacentHTML("beforeend", collaborationView(project, false));
+};
+const renderEditorWithAssets = projectEditor;
+projectEditor = function (project) {
+  renderEditorWithAssets(project);
+  $(".screen").insertAdjacentHTML("beforeend", collaborationView(project, true));
+};
+async function createCollaboration(event, projectId, type) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form));
+  if (form.elements.waitingOnClient) values.waitingOnClient = form.elements.waitingOnClient.checked;
+  try {
+    await live(`/projects/${projectId}/${type}`, { method: "POST", body: JSON.stringify(values) });
+    liveSession.user.role === "client"
+      ? client(await refreshClient(projectId))
+      : await openProject(projectId);
+    toast("Saved.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function reactMoodboard(id, reaction, projectId) {
+  try {
+    await live(`/moodboards/${id}/reactions`, {
+      method: "POST",
+      body: JSON.stringify({ reaction }),
+    });
+    liveSession.user.role === "client"
+      ? client(await refreshClient(projectId))
+      : await openProject(projectId);
+    toast("Reaction saved.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+function reviewCalendarView(project, studioView = false) {
+  const reviewable = project.files.filter(
+    (f) => /^image\//.test(f.mime_type) || f.mime_type === "application/pdf",
+  );
+  return `<section class="section"><span class="eyebrow">DESIGN REVIEW</span><h2>Pinned feedback</h2>${project.reviews.map((c) => `<article class="card update ${c.parent_id ? "review-reply" : ""}"><time>${c.parent_id ? "REPLY · " : ""}${esc(c.file_name)} · PAGE ${c.page_number}${c.pin_x !== null ? ` · ${Math.round(c.pin_x)}%, ${Math.round(c.pin_y)}%` : ""}</time><h3>${esc(c.author_name)}</h3><p>${esc(c.body)}</p><div class="actions"><button class="btn alt" onclick="replyDesignComment('${esc(c.id)}','${esc(c.file_id)}','${c.page_number}','${esc(project.id)}')">REPLY</button>${c.resolved_at ? '<span class="status">RESOLVED</span>' : studioView ? `<button class="btn alt" onclick="resolveDesignComment('${esc(c.id)}','${esc(project.id)}')">RESOLVE</button>` : ""}</div></article>`).join("") || empty()}${reviewable.length ? `<form class="card editor-form" onsubmit="addDesignComment(event,'${esc(project.id)}')"><label>Review file<select name="fileId">${reviewable.map((f) => `<option value="${esc(f.id)}">${esc(f.file_name)}</option>`).join("")}</select></label><div class="form-split"><label>Page<input name="pageNumber" type="number" min="1" value="1"></label><label>Pin X %<input name="pinX" type="number" min="0" max="100" value="50"></label><label>Pin Y %<input name="pinY" type="number" min="0" max="100" value="50"></label></div><label>Comment<textarea name="body" required></textarea></label><button class="btn">PIN COMMENT →</button></form>` : ""}</section><section class="section"><span class="eyebrow">CONTENT CALENDAR</span><h2>Monthly content</h2><div class="calendar-grid">${project.posts.map((post) => `<article class="card asset-card"><span class="eyebrow">${esc(post.publish_at.slice(0, 10))} · ${esc(post.channel)}</span><h3>${esc(post.title)}</h3><p>${esc(post.caption || "")}</p><span class="status">${esc(stateTitle(post.status))}</span>${!studioView && post.status === "in_review" ? `<div class="actions"><button class="btn alt" onclick="contentFeedback('${esc(post.id)}','changes_requested','${esc(project.id)}')">CHANGES</button><button class="btn" onclick="contentFeedback('${esc(post.id)}','approved','${esc(project.id)}')">APPROVE</button></div>` : ""}</article>`).join("") || empty()}</div>${studioView ? `<form class="card editor-form" onsubmit="createContentPost(event,'${esc(project.id)}')"><label>Post title<input name="title" required></label><div class="form-split"><label>Channel<input name="channel" required placeholder="Instagram"></label><label>Publish date<input name="publishAt" type="datetime-local" required></label></div><label>Caption<textarea name="caption"></textarea></label><label class="check-row"><input name="sendForApproval" type="checkbox" checked> Send for client approval</label><button class="btn">ADD TO CALENDAR →</button></form>` : ""}</section>`;
+}
+const renderClientWithCollaboration = client;
+client = function (project) {
+  renderClientWithCollaboration(project);
+  $(".screen").insertAdjacentHTML("beforeend", reviewCalendarView(project, false));
+};
+const renderEditorWithCollaboration = projectEditor;
+projectEditor = function (project) {
+  renderEditorWithCollaboration(project);
+  $(".screen").insertAdjacentHTML("beforeend", reviewCalendarView(project, true));
+};
+async function addDesignComment(event, projectId) {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await live(`/projects/${projectId}/reviews`, { method: "POST", body: JSON.stringify(values) });
+    liveSession.user.role === "client"
+      ? client(await refreshClient(projectId))
+      : await openProject(projectId);
+    toast("Comment pinned.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function replyDesignComment(parentId, fileId, pageNumber, projectId) {
+  const body = prompt("Write your reply");
+  if (!body?.trim()) return;
+  try {
+    await live(`/projects/${projectId}/reviews`, {
+      method: "POST",
+      body: JSON.stringify({ parentId, fileId, pageNumber, body }),
+    });
+    liveSession.user.role === "client"
+      ? client(await refreshClient(projectId))
+      : await openProject(projectId);
+    toast("Reply posted.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function resolveDesignComment(id, projectId) {
+  try {
+    await live(`/design-comments/${id}/resolve`, { method: "PATCH", body: "{}" });
+    await openProject(projectId);
+    toast("Comment resolved.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function createContentPost(event, projectId) {
+  event.preventDefault();
+  const form = event.currentTarget,
+    values = Object.fromEntries(new FormData(form));
+  values.sendForApproval = form.elements.sendForApproval.checked;
+  try {
+    await live(`/projects/${projectId}/content-posts`, {
+      method: "POST",
+      body: JSON.stringify(values),
+    });
+    await openProject(projectId);
+    toast("Content post created.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function contentFeedback(id, decision, projectId) {
+  const comment = decision === "changes_requested" ? prompt("What should change?", "") : "";
+  if (decision === "changes_requested" && !comment) return;
+  try {
+    await live(`/content-posts/${id}/feedback`, {
+      method: "POST",
+      body: JSON.stringify({ decision, comment }),
+    });
+    client(await refreshClient(projectId));
+    toast(decision === "approved" ? "Post approved." : "Changes requested.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+const renderClientWithReview = client;
+client = function (project) {
+  renderClientWithReview(project);
+  $(".screen").insertAdjacentHTML(
+    "beforeend",
+    `<section class="section"><span class="eyebrow">STUDIO ANNOUNCEMENTS</span><h2>From The Fourth Wall</h2>${project.announcements.map((a) => `<article class="card update"><time>${formatDate(a.published_at)}</time><h3>${esc(a.title)}</h3><p>${esc(a.body)}</p></article>`).join("") || empty()}</section>${project.onboarding.intake ? "" : `<section class="section"><span class="eyebrow">CLIENT INTAKE</span><h2>Help us understand your brand.</h2><form class="card editor-form" onsubmit="submitIntake(event,'${esc(project.id)}')"><label>Primary audience<textarea name="audience" required></textarea></label><label>Goals<textarea name="goals" required></textarea></label><label>Brands you admire<textarea name="inspiration"></textarea></label><button class="btn">SUBMIT QUESTIONNAIRE →</button></form></section>`}<button class="btn alt" onclick="openNotificationSettings()">NOTIFICATION SETTINGS</button>`,
+  );
+};
+async function submitIntake(event, projectId) {
+  event.preventDefault();
+  const answers = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await live(`/projects/${projectId}/onboarding`, {
+      method: "POST",
+      body: JSON.stringify({ answers }),
+    });
+    client(await refreshClient(projectId));
+    toast("Questionnaire submitted.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function openNotificationSettings() {
+  try {
+    const result = await live("/settings/notifications"),
+      p = result.preferences,
+      d = document.createElement("dialog");
+    d.innerHTML = `<form class="modal editor-form" id="notificationForm"><button class="close" type="button" onclick="this.closest('dialog').close()">×</button><h2>Notifications</h2>${[
+      ["emailUpdates", "Email project updates", p.email_updates],
+      ["weeklyDigest", "Weekly email digest", p.weekly_digest],
+      ["messageAlerts", "New messages", p.message_alerts],
+      ["approvalAlerts", "Approval requests", p.approval_alerts],
+    ]
+      .map(
+        ([name, label, value]) =>
+          `<label class="check-row"><input name="${name}" type="checkbox" ${value ? "checked" : ""}> ${label}</label>`,
+      )
+      .join("")}<button class="btn">SAVE PREFERENCES</button></form>`;
+    document.body.append(d);
+    d.showModal();
+    d.addEventListener("close", () => d.remove());
+    $("#notificationForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget,
+        v = {};
+      for (const name of ["emailUpdates", "weeklyDigest", "messageAlerts", "approvalAlerts"])
+        v[name] = f.elements[name].checked;
+      await live("/settings/notifications", { method: "PATCH", body: JSON.stringify(v) });
+      d.close();
+      toast("Preferences saved.");
+    };
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+function insightView(project, studioView = false) {
+  return `<section class="section brand-book"><span class="eyebrow">BRAND GUIDELINES</span><h2>Your living brand book.</h2>${project.guidelines.map((g) => `<article class="card guideline"><h3>${esc(g.title)}</h3><p>${esc(g.content)}</p></article>`).join("") || empty()}${studioView ? `<form class="card editor-form" onsubmit="createGuideline(event,'${esc(project.id)}')"><input name="title" required placeholder="Guideline chapter"><textarea name="content" required placeholder="Voice, colour, typography or usage guidance"></textarea><button class="btn">ADD CHAPTER</button></form><section class="card timer"><h3>Time tracking</h3><input id="timerDescription" placeholder="What are you working on?"><div class="actions"><button class="btn" onclick="timeAction('${esc(project.id)}','start')">START</button><button class="btn alt" onclick="timeAction('${esc(project.id)}','stop')">STOP</button></div><p>${project.timeEntries.reduce((n, x) => n + (x.minutes || 0), 0)} minutes recorded</p></section>` : `<button class="btn alt" onclick="downloadExport('${esc(project.id)}')">EXPORT MY PROJECT ↓</button>${project.status === "Complete" ? `<form class="card editor-form" onsubmit="submitTestimonial(event,'${esc(project.id)}')"><h3>Share your experience</h3><label>Rating<select name="rating">${[5, 4, 3, 2, 1].map((x) => `<option>${x}</option>`).join("")}</select></label><label>Testimonial<textarea name="quote" required></textarea></label><input name="referralName" placeholder="Referral name (optional)"><input name="referralEmail" type="email" placeholder="Referral email (optional)"><button class="btn">SEND THANKS →</button></form>` : ""}`}</section>`;
+}
+const renderClientWithOperations = client;
+client = function (project) {
+  renderClientWithOperations(project);
+  $(".screen").insertAdjacentHTML("beforeend", insightView(project, false));
+};
+const renderEditorWithOperations = projectEditor;
+projectEditor = function (project) {
+  renderEditorWithOperations(project);
+  const updateForm = $("#updateForm");
+  updateForm?.insertAdjacentHTML(
+    "beforeend",
+    `<label>Attachment<select name="attachmentFileId"><option value="">No attachment</option>${project.files.map((f) => `<option value="${esc(f.id)}">${esc(f.file_name)}</option>`).join("")}</select></label><label>Schedule publishing (optional)<input name="scheduledAt" type="datetime-local"></label>`,
+  );
+  $(".screen").insertAdjacentHTML("beforeend", insightView(project, true));
+};
+async function createGuideline(event, projectId) {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await live(`/projects/${projectId}/guidelines`, {
+      method: "POST",
+      body: JSON.stringify(values),
+    });
+    await openProject(projectId);
+    toast("Brand guideline added.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function timeAction(projectId, action) {
+  try {
+    await live(`/projects/${projectId}/time-entries`, {
+      method: "POST",
+      body: JSON.stringify({ action, description: $("#timerDescription")?.value || "" }),
+    });
+    await openProject(projectId);
+    toast(action === "start" ? "Timer started." : "Timer stopped.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function submitTestimonial(event, projectId) {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await live(`/projects/${projectId}/testimonial`, {
+      method: "POST",
+      body: JSON.stringify(values),
+    });
+    event.currentTarget.remove();
+    toast("Thank you — received.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+const money = (amount, currency = "INR") =>
+  new Intl.NumberFormat(data.language || "en-IN", { style: "currency", currency }).format(
+    (Number(amount) || 0) / 100,
+  );
+function commercialView(project, studioView = false) {
+  return `<section class="section"><span class="eyebrow">INVOICES & PAYMENTS</span><h2>${studioView ? "Commercial desk" : "Your invoices"}</h2>${project.invoices.map((i) => `<article class="card row"><div><h3>${esc(i.invoice_number)}</h3><p>${money(i.total, i.currency)} · Due ${esc(i.due_date || "on receipt")}</p></div><div><span class="status">${esc(stateTitle(i.status))}</span>${!studioView && i.status !== "paid" && i.status !== "void" ? `<button class="btn" onclick="payInvoice('${esc(i.id)}')">PAY BY CARD / UPI →</button>` : ""}</div></article>`).join("") || empty()}${studioView ? `<form class="card editor-form" onsubmit="createInvoice(event,'${esc(project.id)}')"><h3>Create invoice</h3><label>Description<input name="description" required placeholder="Brand identity engagement"></label><div class="form-split"><label>Amount (₹)<input name="amount" type="number" min="1" step="0.01" required></label><label>Tax (₹)<input name="tax" type="number" min="0" step="0.01" value="0"></label><label>Due date<input name="dueDate" type="date"></label></div><label class="check-row"><input name="sendNow" type="checkbox" checked> Send to client</label><button class="btn">CREATE INVOICE →</button></form>` : ""}</section><section class="section"><span class="eyebrow">PROPOSALS & CONTRACTS</span><h2>Agreements</h2>${project.proposals.map((p) => `<article class="card row"><div><h3>${esc(p.title)}</h3><p>${money(p.total, p.currency)}</p></div><div><span class="status">${esc(stateTitle(p.status))}</span>${studioView && p.pdf_file_id && p.status !== "signed" ? `<button class="btn" onclick="sendProposal('${esc(p.id)}','${esc(project.id)}')">SEND FOR E-SIGN →</button>` : ""}</div></article>`).join("") || empty()}${
+    studioView
+      ? `<form class="card editor-form" onsubmit="createProposal(event,'${esc(project.id)}')"><h3>Build a proposal</h3><label>Title<input name="title" required placeholder="Brand transformation proposal"></label><label>Introduction<textarea name="introduction"></textarea></label><label>Service block<input name="blockTitle" required placeholder="Strategy and identity"></label><label>Block description<textarea name="description"></textarea></label><label>Price (₹)<input name="amount" type="number" min="0" step="0.01" required></label><label>Branded proposal PDF<select name="pdfFileId"><option value="">Attach later</option>${project.files
+          .filter((f) => f.mime_type === "application/pdf")
+          .map((f) => `<option value="${esc(f.id)}">${esc(f.file_name)}</option>`)
+          .join("")}</select></label><button class="btn">CREATE PROPOSAL →</button></form>`
+      : ""
+  }</section><section class="section"><span class="eyebrow">MEETINGS</span><h2>Studio calendar</h2>${project.meetings.map((m) => `<article class="card row"><div><h3>${esc(m.title)}</h3><p>${new Date(m.starts_at).toLocaleString()} · ${m.duration_minutes} min</p></div>${m.join_url ? `<a class="btn" href="${esc(m.join_url)}" target="_blank" rel="noopener">JOIN →</a>` : `<span class="status">${esc(stateTitle(m.status))}</span>`}</article>`).join("") || empty()}<form class="card editor-form" onsubmit="bookMeeting(event,'${esc(project.id)}')"><h3>${studioView ? "Schedule a client meeting" : "Book time with the studio"}</h3><label>Meeting title<input name="title" required value="Project check-in"></label><div class="form-split"><label>Date and time<input name="startsAt" type="datetime-local" required></label><label>Duration<select name="durationMinutes"><option>30</option><option>45</option><option>60</option></select></label></div><button class="btn">BOOK WITH GOOGLE CALENDAR →</button></form></section>`;
+}
+const renderClientWithInsights = client;
+client = function (project) {
+  renderClientWithInsights(project);
+  $(".screen").insertAdjacentHTML("beforeend", commercialView(project, false));
+};
+const renderEditorWithInsights = projectEditor;
+projectEditor = function (project) {
+  renderEditorWithInsights(project);
+  $(".screen").insertAdjacentHTML("beforeend", commercialView(project, true));
+};
+async function createInvoice(event, projectId) {
+  event.preventDefault();
+  const f = event.currentTarget,
+    v = Object.fromEntries(new FormData(f));
+  try {
+    await live(`/projects/${projectId}/invoices`, {
+      method: "POST",
+      body: JSON.stringify({
+        items: [
+          {
+            description: v.description,
+            quantity: 1,
+            unitAmount: Math.round(Number(v.amount) * 100),
+          },
+        ],
+        tax: Math.round(Number(v.tax || 0) * 100),
+        dueDate: v.dueDate,
+        sendNow: f.elements.sendNow.checked,
+      }),
+    });
+    await openProject(projectId);
+    toast("Invoice created.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function payInvoice(id) {
+  try {
+    const result = await live(`/invoices/${id}/payment-link`, { method: "POST", body: "{}" });
+    if (result.status === "paid") return toast("This invoice is already paid.");
+    location.href = result.url;
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function createProposal(event, projectId) {
+  event.preventDefault();
+  const v = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await live(`/projects/${projectId}/proposals`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: v.title,
+        introduction: v.introduction,
+        pdfFileId: v.pdfFileId,
+        blocks: [
+          {
+            title: v.blockTitle,
+            description: v.description,
+            amount: Math.round(Number(v.amount) * 100),
+          },
+        ],
+      }),
+    });
+    await openProject(projectId);
+    toast("Proposal created.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function sendProposal(id, projectId) {
+  if (!confirm("Send this PDF to the client through Dropbox Sign?")) return;
+  try {
+    await live(`/proposals/${id}/send-signature`, { method: "POST", body: "{}" });
+    await openProject(projectId);
+    toast("Dropbox Sign request sent.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function bookMeeting(event, projectId) {
+  event.preventDefault();
+  const v = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await live(`/projects/${projectId}/meetings`, { method: "POST", body: JSON.stringify(v) });
+    liveSession.user.role === "client"
+      ? client(await refreshClient(projectId))
+      : await openProject(projectId);
+    toast("Meeting booked and invitations sent.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function saveProject(event, id) {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await live(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(values) });
+    await refreshStudio();
+    await openProject(id);
+    toast("Project details saved.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function addDeliverable(event, id) {
+  event.preventDefault();
+  const title = new FormData(event.currentTarget).get("title");
+  try {
+    await live(`/projects/${id}/deliverables`, { method: "POST", body: JSON.stringify({ title }) });
+    await openProject(id);
+    toast("Deliverable added.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function uploadStudioFile(event, id) {
+  event.preventDefault();
+  const form = event.currentTarget,
+    file = form.elements.file.files[0],
+    deliverableId = form.elements.deliverableId.value;
+  if (!file) return;
+  if (file.size > 26214400) {
+    toast("Choose a file smaller than 25 MB.");
+    return;
+  }
+  try {
+    const headers = { "content-type": file.type, "x-file-name": encodeURIComponent(file.name) };
+    if (deliverableId) headers["x-deliverable-id"] = deliverableId;
+    await live(`/projects/${id}/files`, {
+      method: "POST",
+      headers,
+      body: await file.arrayBuffer(),
+    });
+    await openProject(id);
+    toast("File uploaded securely.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function postProjectUpdate(event, id) {
+  event.preventDefault();
+  const form = event.currentTarget,
+    values = Object.fromEntries(new FormData(form));
+  values.requiresApproval = form.elements.requiresApproval.checked;
+  values.visibleToClient = form.elements.visibleToClient.checked;
+  try {
+    await live(`/projects/${id}/updates`, { method: "POST", body: JSON.stringify(values) });
+    await openProject(id);
+    toast("Studio update posted.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+edit = function () {
+  const dialog = document.createElement("dialog");
+  dialog.innerHTML = `<form class="modal editor-form" id="createProjectForm"><button class="close" type="button" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">NEW PROJECT</span><h2>Begin thoughtfully.</h2><label>Project name<input name="name" required maxlength="160" placeholder="Client or engagement name"></label><label>Service<input name="service" required maxlength="160" placeholder="Brand identity, website, campaign…"></label><div class="form-split"><label>Status<select name="status"><option value="planning">Planning</option><option value="active">Active</option><option value="on_hold">On hold</option></select></label><label>Due date<input name="dueDate" type="date"></label></div><label>Starting progress <output id="newProgressValue">0%</output><input name="progress" type="range" min="0" max="100" value="0" oninput="document.querySelector('#newProgressValue').value=this.value+'%'" aria-label="Starting progress"></label><span class="eyebrow">OPTIONAL CLIENT ACCESS</span><label>Client name<input name="displayName" maxlength="160" placeholder="Client name"></label><label>Client email<input name="clientEmail" type="email" placeholder="client@company.com"></label><label>Project access code<input name="accessCode" minlength="6" maxlength="128" autocomplete="new-password" placeholder="At least 6 characters"></label><p class="muted">If you add an email, enter a code and share it privately with the client.</p><button class="btn" id="createProjectButton">CREATE PROJECT →</button></form>`;
+  document.body.append(dialog);
+  dialog.showModal();
+  dialog.addEventListener("close", () => dialog.remove());
+  $("#createProjectForm").onsubmit = createProject;
+};
+async function createProject(event) {
+  event.preventDefault();
+  const form = event.currentTarget,
+    values = Object.fromEntries(new FormData(form)),
+    button = $("#createProjectButton");
+  if ((values.clientEmail && !values.accessCode) || (!values.clientEmail && values.accessCode)) {
+    toast("Add both the client email and access code.");
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "CREATING…";
+  try {
+    const result = await live("/projects", {
+      method: "POST",
+      body: JSON.stringify({
+        name: values.name,
+        service: values.service,
+        status: values.status,
+        dueDate: values.dueDate || null,
+        progress: Number(values.progress),
+      }),
+    });
+    const projectId = result.project.id;
+    if (values.clientEmail)
+      await live(`/projects/${projectId}/client-access`, {
+        method: "POST",
+        body: JSON.stringify({
+          email: values.clientEmail,
+          displayName: values.displayName || values.clientEmail.split("@")[0],
+          code: values.accessCode,
+        }),
+      });
+    form.closest("dialog").close();
+    await refreshStudio();
+    go("projects");
+    toast(values.clientEmail ? "Project created and client access enabled." : "Project created.");
+  } catch (reason) {
+    button.disabled = false;
+    button.textContent = "CREATE PROJECT →";
+    toast(reason.message);
+  }
+}
+async function bootLive() {
+  if (liveSession?.user?.role === "client" && localStorage.tfwProject) {
+    try {
+      client(await refreshClient(localStorage.tfwProject));
+      return;
+    } catch (_) {}
+  }
+  if (liveSession?.user?.role && liveSession.user.role !== "client") {
+    try {
+      await refreshStudio();
+      desk();
+      return;
+    } catch (_) {}
+  }
+  login();
+}
+load();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+bootLive();
