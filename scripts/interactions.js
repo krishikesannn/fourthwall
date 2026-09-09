@@ -93,6 +93,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (contactForm) {
     contactForm.addEventListener('submit', async e => {
       e.preventDefault();
+      if (!contactForm.checkValidity()) {
+        contactForm.reportValidity();
+        return;
+      }
       const name    = document.getElementById('contactName')?.value.trim();
       const email   = document.getElementById('contactEmail')?.value.trim();
       const details = document.getElementById('contactDetails')?.value.trim();

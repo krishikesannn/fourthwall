@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /portal.html
+Disallow: /pwa/
+Sitemap: https://fourthwall.pages.dev/sitemap.xml

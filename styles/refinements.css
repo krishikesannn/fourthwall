@@ -2137,3 +2137,14 @@ body {
 .portal-entry__actions { display: grid; gap: .85rem; min-width: 12rem; text-align: center; }
 .portal-entry__admin { color: #f7f0e6; font-size: .7rem; letter-spacing: .12em; font-weight: 700; text-decoration: none; }
 @media (max-width: 700px) { .portal-entry { display: grid; } .portal-entry__actions { justify-self: stretch; } }
+
+/* Launch-readiness: accessible, brand-aligned cookie controls. */
+.cookie-banner { position: fixed; z-index: 10000; right: clamp(1rem, 3vw, 2rem); bottom: clamp(1rem, 3vw, 2rem); width: min(35rem, calc(100% - 2rem)); display: flex; align-items: end; justify-content: space-between; gap: 1.25rem; padding: 1.25rem; border: 1px solid rgba(184,146,70,.5); border-radius: 12px; color: #faf7f2; background: #0e3832; box-shadow: 0 12px 38px rgba(10,43,38,.25); font-family: var(--font-sans); }
+.cookie-banner strong { font-family: var(--font-serif); font-size: 1.2rem; }
+.cookie-banner p { margin: .35rem 0; color: rgba(250,247,242,.78); font-size: .9rem; line-height: 1.5; }
+.cookie-banner a { color: #cfa958; font-size: .82rem; }
+.cookie-banner__actions { display: flex; flex-wrap: wrap; gap: .55rem; flex-shrink: 0; }
+.cookie-banner button { min-height: 44px; padding: .65rem .9rem; border: 1px solid #cfa958; border-radius: 7px; color: #faf7f2; background: transparent; font: 700 .7rem var(--font-sans); letter-spacing: .08em; cursor: pointer; }
+.cookie-banner button:last-child { color: #0e3832; background: #cfa958; }
+.cookie-banner button:focus-visible { outline: 3px solid #faf7f2; outline-offset: 3px; }
+@media (max-width: 650px) { .cookie-banner { display: grid; } .cookie-banner__actions { width: 100%; } .cookie-banner button { flex: 1; } }

@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
+    "optimize:images": "node scripts/optimize-images.js",
     "dev:cloudflare": "wrangler dev --config cloudflare/wrangler.toml",
     "deploy:cloudflare": "wrangler deploy --config cloudflare/wrangler.toml"
   },
