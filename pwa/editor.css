@@ -29,3 +29,4 @@ input[type="file"] { width: 100%; }
 .pipeline-stage > .card { margin-bottom: 9px; }
 .pipeline-modal { width: min(1100px,94vw); }
 @media (max-width: 390px) { .form-split { grid-template-columns: 1fr; } }
+.review-reply{margin-left:clamp(1rem,5vw,3rem);border-left:3px solid var(--gold)}
