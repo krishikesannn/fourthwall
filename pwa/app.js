@@ -964,7 +964,7 @@ function reviewCalendarView(project, studioView = false) {
   const reviewable = project.files.filter(
     (f) => /^image\//.test(f.mime_type) || f.mime_type === "application/pdf",
   );
-  const review = `<section class="section"><span class="eyebrow">DESIGN REVIEW</span><h2>Pinned feedback</h2>${project.reviews.map((c) => `<article class="card update ${c.parent_id ? "review-reply" : ""}"><time>${c.parent_id ? "REPLY · " : ""}${esc(c.file_name)} · PAGE ${c.page_number}${c.pin_x !== null ? ` · ${Math.round(c.pin_x)}%, ${Math.round(c.pin_y)}%` : ""}</time><h3>${esc(c.author_name)}</h3><p>${esc(c.body)}</p><div class="actions"><button class="btn alt" onclick="replyDesignComment('${esc(c.id)}','${esc(c.file_id)}','${c.page_number}','${esc(project.id)}')">REPLY</button>${c.resolved_at ? '<span class="status">RESOLVED</span>' : studioView ? `<button class="btn alt" onclick="resolveDesignComment('${esc(c.id)}','${esc(project.id)}')">RESOLVE</button>` : ""}</div></article>`).join("") || empty()}${reviewable.length ? `<form class="card editor-form" onsubmit="addDesignComment(event,'${esc(project.id)}')"><label>Review file<select name="fileId">${reviewable.map((f) => `<option value="${esc(f.id)}">${esc(f.file_name)}</option>`).join("")}</select></label><div class="form-split"><label>Page<input name="pageNumber" type="number" min="1" value="1"></label><label>Pin X %<input name="pinX" type="number" min="0" max="100" value="50"></label><label>Pin Y %<input name="pinY" type="number" min="0" max="100" value="50"></label></div><label>Comment<textarea name="body" required></textarea></label><button class="btn">PIN COMMENT →</button></form>` : ""}</section>`;
+  const review = `<section class="section"><span class="eyebrow">DESIGN REVIEW</span><h2>Pinned feedback</h2>${reviewable.length ? `<button class="btn" onclick="openDesignReview('${esc(project.id)}')">OPEN VISUAL REVIEW →</button>` : ""}${project.reviews.map((c) => `<article class="card update ${c.parent_id ? "review-reply" : ""}"><time>${c.parent_id ? "REPLY · " : ""}${esc(c.file_name)} · PAGE ${c.page_number}${c.pin_x !== null ? ` · ${Math.round(c.pin_x)}%, ${Math.round(c.pin_y)}%` : ""}</time><h3>${esc(c.author_name)}</h3><p>${esc(c.body)}</p><div class="actions"><button class="btn alt" onclick="replyDesignComment('${esc(c.id)}','${esc(c.file_id)}','${c.page_number}','${esc(project.id)}')">REPLY</button>${c.resolved_at ? '<span class="status">RESOLVED</span>' : studioView ? `<button class="btn alt" onclick="resolveDesignComment('${esc(c.id)}','${esc(project.id)}')">RESOLVE</button>` : ""}</div></article>`).join("") || empty()}</section>`;
   const form = studioView
     ? `<form class="card editor-form" onsubmit="createContentPost(event,'${esc(project.id)}')"><label>Post title<input name="title" required></label><div class="form-split"><label>Channel<input name="channel" required placeholder="Instagram"></label><label>Publish date<input name="publishAt" type="datetime-local" required></label></div><label>Caption<textarea name="caption"></textarea></label><label class="check-row"><input name="sendForApproval" type="checkbox" checked> Send for client approval</label><button class="btn">ADD TO CALENDAR →</button></form>`
     : "";
@@ -992,6 +992,97 @@ async function addDesignComment(event, projectId) {
   } catch (reason) {
     toast(reason.message);
   }
+}
+async function reviewFileBlob(fileId) {
+  const response = await fetch(`${LIVE_API}/files/${fileId}/download`, {
+    headers: { authorization: `Bearer ${liveSession.token}` },
+  });
+  if (!response.ok)
+    throw Error((await response.json().catch(() => ({}))).error || "Could not open review file");
+  return response.blob();
+}
+async function openDesignReview(projectId) {
+  const project = activeCalendarProject,
+    files = project.files.filter(
+      (file) => /^image\//.test(file.mime_type) || file.mime_type === "application/pdf",
+    ),
+    dialog = document.createElement("dialog");
+  dialog.innerHTML = `<section class="modal visual-review"><button class="close" type="button" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">VISUAL REVIEW</span><h2>Tap the work to place a pin.</h2><label>File<select id="reviewFileSelect">${files.map((file) => `<option value="${esc(file.id)}">${esc(file.file_name)}</option>`).join("")}</select></label><label>PDF page<input id="reviewPage" type="number" min="1" value="1"></label><div class="review-stage" id="reviewStage" role="button" tabindex="0" aria-label="Tap to place a review pin"><p class="muted">Opening secure preview…</p></div><form class="editor-form" id="visualReviewForm"><input name="fileId" type="hidden"><input name="pageNumber" type="hidden" value="1"><input name="pinX" type="hidden"><input name="pinY" type="hidden"><label>Comment<textarea name="body" required placeholder="Choose a point above, then describe your feedback."></textarea></label><button class="btn">POST PINNED COMMENT →</button></form></section>`;
+  document.body.append(dialog);
+  dialog.showModal();
+  const stage = dialog.querySelector("#reviewStage"),
+    select = dialog.querySelector("#reviewFileSelect"),
+    page = dialog.querySelector("#reviewPage"),
+    form = dialog.querySelector("#visualReviewForm");
+  let objectUrl = null;
+  const renderPins = () => {
+    stage.querySelectorAll(".review-pin").forEach((pin) => pin.remove());
+    project.reviews
+      .filter(
+        (comment) =>
+          comment.file_id === select.value &&
+          Number(comment.page_number) === Number(page.value) &&
+          comment.pin_x !== null &&
+          !comment.parent_id,
+      )
+      .forEach((comment, index) => {
+        const pin = document.createElement("button");
+        pin.type = "button";
+        pin.className = `review-pin${comment.resolved_at ? " resolved" : ""}`;
+        pin.style.left = `${comment.pin_x}%`;
+        pin.style.top = `${comment.pin_y}%`;
+        pin.title = comment.body;
+        pin.textContent = String(index + 1);
+        stage.append(pin);
+      });
+  };
+  const openFile = async () => {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    const file = files.find((item) => item.id === select.value),
+      blob = await reviewFileBlob(file.id);
+    objectUrl = URL.createObjectURL(blob);
+    stage.innerHTML = file.mime_type === "application/pdf"
+      ? `<object data="${objectUrl}#page=${Number(page.value)}&toolbar=0" type="application/pdf" aria-label="${esc(file.file_name)}"></object>`
+      : `<img src="${objectUrl}" alt="${esc(file.file_name)}">`;
+    form.elements.fileId.value = file.id;
+    renderPins();
+  };
+  const placePin = (event) => {
+    if (event.target.classList.contains("review-pin")) return;
+    const box = stage.getBoundingClientRect(),
+      x = Math.max(0, Math.min(100, ((event.clientX - box.left) / box.width) * 100)),
+      y = Math.max(0, Math.min(100, ((event.clientY - box.top) / box.height) * 100));
+    form.elements.pinX.value = x.toFixed(2);
+    form.elements.pinY.value = y.toFixed(2);
+    form.elements.pageNumber.value = page.value;
+    stage.querySelector(".review-pin--draft")?.remove();
+    const pin = document.createElement("span");
+    pin.className = "review-pin review-pin--draft";
+    pin.style.left = `${x}%`;
+    pin.style.top = `${y}%`;
+    pin.textContent = "+";
+    stage.append(pin);
+    form.elements.body.focus();
+  };
+  stage.addEventListener("click", placePin);
+  select.addEventListener("change", () => openFile().catch((reason) => toast(reason.message)));
+  page.addEventListener("change", () => {
+    form.elements.pageNumber.value = page.value;
+    openFile().catch((reason) => toast(reason.message));
+  });
+  form.onsubmit = async (event) => {
+    if (!form.elements.pinX.value) {
+      event.preventDefault();
+      return toast("Tap the preview to place your pin first.");
+    }
+    dialog.close();
+    await addDesignComment(event, projectId);
+  };
+  dialog.addEventListener("close", () => {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    dialog.remove();
+  });
+  openFile().catch((reason) => toast(reason.message));
 }
 async function replyDesignComment(parentId, fileId, pageNumber, projectId) {
   const body = prompt("Write your reply");

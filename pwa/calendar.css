@@ -76,3 +76,49 @@
     display: none;
   }
 }
+.visual-review {
+  width: min(94vw, 860px);
+}
+.review-stage {
+  position: relative;
+  display: grid;
+  min-height: 320px;
+  margin: 1rem 0;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--deep);
+  cursor: crosshair;
+}
+.review-stage img,
+.review-stage object {
+  display: block;
+  width: 100%;
+  height: min(65vh, 680px);
+  object-fit: contain;
+  pointer-events: none;
+}
+.review-pin {
+  position: absolute;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--cream);
+  border-radius: 50%;
+  color: var(--cream);
+  background: var(--gold);
+  box-shadow: 0 3px 12px rgba(10, 43, 38, 0.35);
+  font-weight: 700;
+}
+.review-pin.resolved {
+  opacity: 0.45;
+}
+.review-pin--draft {
+  display: grid;
+  place-items: center;
+  background: var(--green);
+}
