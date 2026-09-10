@@ -223,6 +223,78 @@ function proposalPdf(proposal, blocks, branding = {}) {
   output += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return encoder.encode(output);
 }
+const CRC_TABLE = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1)
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  return value >>> 0;
+});
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function zipHeader(size) {
+  return new Uint8Array(size);
+}
+function writeU16(bytes, offset, value) {
+  new DataView(bytes.buffer).setUint16(offset, value, true);
+}
+function writeU32(bytes, offset, value) {
+  new DataView(bytes.buffer).setUint32(offset, value >>> 0, true);
+}
+function joinBytes(parts) {
+  const output = new Uint8Array(parts.reduce((sum, part) => sum + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) {
+    output.set(part, offset);
+    offset += part.byteLength;
+  }
+  return output;
+}
+function createZip(entries) {
+  const localParts = [],
+    centralParts = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = encoder.encode(safeFileName(entry.name)),
+      content = entry.bytes,
+      crc = crc32(content),
+      local = zipHeader(30),
+      central = zipHeader(46);
+    writeU32(local, 0, 0x04034b50);
+    writeU16(local, 4, 20);
+    writeU32(local, 14, crc);
+    writeU32(local, 18, content.byteLength);
+    writeU32(local, 22, content.byteLength);
+    writeU16(local, 26, name.byteLength);
+    writeU32(central, 0, 0x02014b50);
+    writeU16(central, 4, 20);
+    writeU16(central, 6, 20);
+    writeU32(central, 16, crc);
+    writeU32(central, 20, content.byteLength);
+    writeU32(central, 24, content.byteLength);
+    writeU16(central, 28, name.byteLength);
+    writeU32(central, 42, offset);
+    localParts.push(local, name, content);
+    centralParts.push(central, name);
+    offset += local.byteLength + name.byteLength + content.byteLength;
+  }
+  const central = joinBytes(centralParts),
+    end = zipHeader(22);
+  writeU32(end, 0, 0x06054b50);
+  writeU16(end, 8, entries.length);
+  writeU16(end, 10, entries.length);
+  writeU32(end, 12, central.byteLength);
+  writeU32(end, 16, offset);
+  return joinBytes([...localParts, central, end]);
+}
+async function storageObject(env, path) {
+  const endpoint = `${env.SUPABASE_URL}/storage/v1/object/authenticated/${encodeURIComponent(env.SUPABASE_STORAGE_BUCKET)}/${path.split("/").map(encodeURIComponent).join("/")}`,
+    response = await fetch(endpoint, { headers: storageHeaders(env) });
+  if (!response.ok) throw Error(`Could not export file (${response.status})`);
+  return new Uint8Array(await response.arrayBuffer());
+}
 async function uploadGeneratedPdf(env, proposal, blocks, branding, userId) {
   if (!storageReady(env)) throw Error("Secure file storage is not configured");
   const bytes = proposalPdf(proposal, blocks, branding),
@@ -1390,7 +1462,7 @@ export default {
       for (const p of projects.filter(Boolean)) {
         const [files, messages, deliverables] = await Promise.all([
           env.DB.prepare(
-            "select id,file_name,mime_type,size_bytes,version,created_at from project_files where project_id=?",
+            "select id,file_name,mime_type,size_bytes,version,created_at,storage_path from project_files where project_id=?",
           )
             .bind(p.id)
             .all(),
@@ -1403,7 +1475,7 @@ export default {
         ]);
         result.projects.push({
           ...p,
-          files: files.results,
+          files: files.results.map(({ storage_path: _storagePath, ...file }) => file),
           messages: messages.results,
           deliverables: deliverables.results,
         });
@@ -1411,6 +1483,44 @@ export default {
       if (studio(user)) {
         result.contacts = (await env.DB.prepare("select * from client_contacts").all()).results;
         result.inquiries = (await env.DB.prepare("select * from inquiries").all()).results;
+      }
+      if (url.searchParams.get("format") === "zip") {
+        if (!projectId) return deny("Choose one project for a file archive", 400);
+        if (!storageReady(env)) return deny("Secure file storage is not configured", 503);
+        const fileRows = (
+            await env.DB.prepare(
+              "select id,file_name,size_bytes,version,storage_path from project_files where project_id=? order by created_at",
+            )
+              .bind(projectId)
+              .all()
+          ).results,
+          totalBytes = fileRows.reduce((sum, file) => sum + Number(file.size_bytes || 0), 0);
+        if (totalBytes > 50 * 1024 * 1024)
+          return deny("This archive is over 50 MB. Download large files individually.", 413);
+        const entries = [
+          {
+            name: "project-export.json",
+            bytes: encoder.encode(JSON.stringify(result, null, 2)),
+          },
+        ];
+        for (const file of fileRows) {
+          entries.push({
+            name: `v${file.version}-${file.id.slice(0, 8)}-${file.file_name}`,
+            bytes: await storageObject(env, file.storage_path),
+          });
+        }
+        const archive = createZip(entries);
+        await audit(env, user, projectId, "exported", "project_archive", projectId, {
+          files: fileRows.length,
+          bytes: archive.byteLength,
+        });
+        return new Response(archive, {
+          headers: {
+            "content-type": "application/zip",
+            "content-disposition": `attachment; filename="fourth-wall-project-${projectId}.zip"`,
+            "access-control-allow-origin": "*",
+          },
+        });
       }
       return new Response(JSON.stringify(result, null, 2), {
         headers: {

@@ -455,6 +455,23 @@ async function downloadExport(projectId = "") {
     toast(reason.message);
   }
 }
+async function downloadProjectArchive(projectId) {
+  try {
+    const response = await fetch(
+      `${LIVE_API}/export?projectId=${encodeURIComponent(projectId)}&format=zip`,
+      { headers: { authorization: `Bearer ${liveSession.token}` } },
+    );
+    if (!response.ok)
+      throw Error((await response.json().catch(() => ({}))).error || "Archive export failed.");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(await response.blob());
+    link.download = `fourth-wall-project-${projectId}.zip`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
 const bytesLabel = (value) =>
   value >= 1048576
     ? `${(value / 1048576).toFixed(1)} MB`
@@ -1229,7 +1246,7 @@ async function openNotificationSettings() {
   }
 }
 function insightView(project, studioView = false) {
-  return `<section class="section brand-book"><span class="eyebrow">BRAND GUIDELINES</span><h2>Your living brand book.</h2>${project.guidelines.map((g) => `<article class="card guideline"><h3>${esc(g.title)}</h3><p>${esc(g.content)}</p></article>`).join("") || empty()}${studioView ? `<form class="card editor-form" onsubmit="createGuideline(event,'${esc(project.id)}')"><input name="title" required placeholder="Guideline chapter"><textarea name="content" required placeholder="Voice, colour, typography or usage guidance"></textarea><button class="btn">ADD CHAPTER</button></form><section class="card timer"><h3>Time tracking</h3><input id="timerDescription" placeholder="What are you working on?"><div class="actions"><button class="btn" onclick="timeAction('${esc(project.id)}','start')">START</button><button class="btn alt" onclick="timeAction('${esc(project.id)}','stop')">STOP</button></div><p>${project.timeEntries.reduce((n, x) => n + (x.minutes || 0), 0)} minutes recorded</p><div class="mini-list"><span class="eyebrow">WEEKLY TOTALS</span>${(project.weeklyTime || []).map((row) => `<p>${esc(row.week)} · <strong>${Math.round((row.minutes / 60) * 10) / 10} h</strong></p>`).join("") || `<p>No time recorded yet.</p>`}</div></section>` : `<button class="btn alt" onclick="downloadExport('${esc(project.id)}')">EXPORT MY PROJECT ↓</button>${project.status === "Complete" ? `<form class="card editor-form" onsubmit="submitTestimonial(event,'${esc(project.id)}')"><h3>Share your experience</h3><label>Rating<select name="rating">${[5, 4, 3, 2, 1].map((x) => `<option>${x}</option>`).join("")}</select></label><label>Testimonial<textarea name="quote" required></textarea></label><input name="referralName" placeholder="Referral name (optional)"><input name="referralEmail" type="email" placeholder="Referral email (optional)"><button class="btn">SEND THANKS →</button></form>` : ""}`}</section>`;
+  return `<section class="section brand-book"><span class="eyebrow">BRAND GUIDELINES</span><h2>Your living brand book.</h2>${project.guidelines.map((g) => `<article class="card guideline"><h3>${esc(g.title)}</h3><p>${esc(g.content)}</p></article>`).join("") || empty()}${studioView ? `<form class="card editor-form" onsubmit="createGuideline(event,'${esc(project.id)}')"><input name="title" required placeholder="Guideline chapter"><textarea name="content" required placeholder="Voice, colour, typography or usage guidance"></textarea><button class="btn">ADD CHAPTER</button></form><section class="card timer"><h3>Time tracking</h3><input id="timerDescription" placeholder="What are you working on?"><div class="actions"><button class="btn" onclick="timeAction('${esc(project.id)}','start')">START</button><button class="btn alt" onclick="timeAction('${esc(project.id)}','stop')">STOP</button></div><p>${project.timeEntries.reduce((n, x) => n + (x.minutes || 0), 0)} minutes recorded</p><div class="mini-list"><span class="eyebrow">WEEKLY TOTALS</span>${(project.weeklyTime || []).map((row) => `<p>${esc(row.week)} · <strong>${Math.round((row.minutes / 60) * 10) / 10} h</strong></p>`).join("") || `<p>No time recorded yet.</p>`}</div></section>` : `<button class="btn alt" onclick="downloadProjectArchive('${esc(project.id)}')">EXPORT PROJECT + FILES (.ZIP) ↓</button>${project.status === "Complete" ? `<form class="card editor-form" onsubmit="submitTestimonial(event,'${esc(project.id)}')"><h3>Share your experience</h3><label>Rating<select name="rating">${[5, 4, 3, 2, 1].map((x) => `<option>${x}</option>`).join("")}</select></label><label>Testimonial<textarea name="quote" required></textarea></label><input name="referralName" placeholder="Referral name (optional)"><input name="referralEmail" type="email" placeholder="Referral email (optional)"><button class="btn">SEND THANKS →</button></form>` : ""}`}</section>`;
 }
 const renderClientWithOperations = client;
 client = function (project) {
