@@ -539,6 +539,10 @@ async function notifyStudioOfInquiry(env, inquiry) {
 }
 async function sendWeeklyDigests(env) {
   if (!env.RESEND_API_KEY || !env.INQUIRY_FROM_EMAIL) return;
+  const branding =
+    (await env.DB.prepare("select studio_name,email_footer from studio_branding where id=1").first()) ||
+    {};
+  const studioName = branding.studio_name || "The Fourth Wall";
   const users = await env.DB.prepare(
     "select u.id,u.email,u.display_name from notification_preferences np join users u on u.id=np.user_id where np.weekly_digest=1",
   ).all();
@@ -555,9 +559,10 @@ async function sendWeeklyDigests(env) {
       .all();
     const text = [
       `Hello ${user.display_name},`,
-      `Your weekly Fourth Wall digest`,
+      `Your weekly ${studioName} digest`,
       ...projects.results.map((p) => `${p.name}: ${p.progress}% complete (${p.status})`),
       ...updates.results.map((u) => `${u.project_name}: ${u.title}`),
+      branding.email_footer || "",
     ].join("\n\n");
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -568,11 +573,83 @@ async function sendWeeklyDigests(env) {
       body: JSON.stringify({
         from: env.INQUIRY_FROM_EMAIL,
         to: [user.email],
-        subject: "Your weekly Fourth Wall project digest",
+        subject: `Your weekly ${studioName} project digest`,
         text,
       }),
     });
     if (!response.ok) console.error("Weekly digest failed", user.id, response.status);
+  }
+}
+async function sendOperationalReminders(env) {
+  if (!env.RESEND_API_KEY || !env.INQUIRY_FROM_EMAIL) return;
+  const branding =
+    (await env.DB.prepare("select studio_name,email_footer from studio_branding where id=1").first()) ||
+    {};
+  const studioName = branding.studio_name || "The Fourth Wall";
+  const footer = branding.email_footer ? `\n\n${branding.email_footer}` : "";
+  const contacts = await env.DB.prepare(
+    "select id,name,email,company,renewal_at from client_contacts where renewal_at between date('now') and date('now','+30 days') and renewal_reminder_sent_at is null order by renewal_at",
+  ).all();
+  if (contacts.results.length && env.INQUIRY_NOTIFICATION_TO) {
+    const text = [
+      `${studioName} renewal reminders`,
+      ...contacts.results.map(
+        (contact) =>
+          `${contact.name}${contact.company ? ` · ${contact.company}` : ""} — ${contact.renewal_at} (${contact.email})`,
+      ),
+      footer,
+    ].join("\n\n");
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        from: env.INQUIRY_FROM_EMAIL,
+        to: [env.INQUIRY_NOTIFICATION_TO],
+        subject: `${contacts.results.length} upcoming client renewal${contacts.results.length === 1 ? "" : "s"}`,
+        text,
+      }),
+    });
+    if (response.ok) {
+      await env.DB.batch(
+        contacts.results.map((contact) =>
+          env.DB.prepare(
+            "update client_contacts set renewal_reminder_sent_at=current_timestamp where id=?",
+          ).bind(contact.id),
+        ),
+      );
+    } else console.error("Renewal reminder failed", response.status);
+  }
+  const meetings = await env.DB.prepare(
+    "select m.id,m.title,m.starts_at,p.name project_name from meetings m join projects p on p.id=m.project_id where m.status='confirmed' and m.reminder_sent_at is null and datetime(m.starts_at) between datetime('now','+23 hours') and datetime('now','+25 hours')",
+  ).all();
+  for (const meeting of meetings.results) {
+    const recipients = await env.DB.prepare(
+      "select distinct u.email from project_members pm join users u on u.id=pm.user_id join meetings m on m.project_id=pm.project_id where m.id=?",
+    )
+      .bind(meeting.id)
+      .all();
+    if (!recipients.results.length) continue;
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        from: env.INQUIRY_FROM_EMAIL,
+        to: recipients.results.map((recipient) => recipient.email),
+        subject: `Reminder: ${meeting.title} is tomorrow`,
+        text: `${meeting.project_name}\n\n${meeting.title}\n${new Date(meeting.starts_at).toLocaleString("en-IN", { timeZone: env.STUDIO_TIME_ZONE || "Asia/Kolkata" })}${footer}`,
+      }),
+    });
+    if (response.ok)
+      await env.DB.prepare("update meetings set reminder_sent_at=current_timestamp where id=?")
+        .bind(meeting.id)
+        .run();
+    else console.error("Meeting reminder failed", meeting.id, response.status);
   }
 }
 async function createSession(env, userId) {
@@ -759,7 +836,7 @@ export default {
     if (url.pathname === "/api/operations" && request.method === "GET") {
       const user = await userFromRequest(request, env);
       if (!(await canManageTeam(env, user))) return deny("Owner access required", 403);
-      const [contacts, team, templates, leads, announcements] = await Promise.all([
+      const [contacts, team, templates, leads, announcements, branding] = await Promise.all([
         env.DB.prepare(
           "select * from client_contacts order by coalesce(renewal_at,'9999'),name",
         ).all(),
@@ -771,6 +848,7 @@ export default {
           "select la.*,i.name lead_name,u.display_name author_name from lead_activities la join inquiries i on i.id=la.inquiry_id join users u on u.id=la.created_by order by la.created_at desc limit 100",
         ).all(),
         env.DB.prepare("select * from announcements order by published_at desc limit 50").all(),
+        env.DB.prepare("select * from studio_branding where id=1").first(),
       ]);
       return json({
         contacts: contacts.results,
@@ -778,7 +856,38 @@ export default {
         templates: templates.results,
         leadActivities: leads.results,
         announcements: announcements.results,
+        branding: branding || {
+          studio_name: "The Fourth Wall",
+          accent_color: "#B89246",
+          email_footer: "",
+        },
       });
+    }
+    if (url.pathname === "/api/studio-branding" && request.method === "PATCH") {
+      const user = await userFromRequest(request, env);
+      if (!(await canManageTeam(env, user))) return deny("Owner access required", 403);
+      const p = await body(request),
+        studioName = String(p?.studioName || "").trim().slice(0, 160),
+        accentColor = String(p?.accentColor || "").trim(),
+        emailFooter = String(p?.emailFooter || "").trim().slice(0, 1000),
+        logoFileId = p?.logoFileId || null;
+      if (!studioName || !/^#[0-9a-f]{6}$/i.test(accentColor))
+        return deny("Studio name and a six-digit hex colour are required", 400);
+      if (logoFileId) {
+        const logo = await env.DB.prepare(
+          "select 1 from project_files where id=? and mime_type in ('image/jpeg','image/png','image/webp')",
+        )
+          .bind(logoFileId)
+          .first();
+        if (!logo) return deny("Brand logo file not found", 404);
+      }
+      await env.DB.prepare(
+        "insert into studio_branding(id,studio_name,logo_file_id,accent_color,email_footer,updated_at) values(1,?,?,?,?,current_timestamp) on conflict(id) do update set studio_name=excluded.studio_name,logo_file_id=excluded.logo_file_id,accent_color=excluded.accent_color,email_footer=excluded.email_footer,updated_at=current_timestamp",
+      )
+        .bind(studioName, logoFileId, accentColor.toUpperCase(), emailFooter || null)
+        .run();
+      await audit(env, user, null, "updated", "studio_branding", "1", { studioName });
+      return json({ ok: true });
     }
     if (url.pathname === "/api/update-templates" && request.method === "GET") {
       const user = await userFromRequest(request, env);
@@ -2745,7 +2854,14 @@ export default {
     }
     return deny("Not found", 404);
   },
-  async scheduled(_event, env, ctx) {
-    ctx.waitUntil(sendWeeklyDigests(env));
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(
+      Promise.all([
+        sendOperationalReminders(env),
+        ...(event.scheduledTime && new Date(event.scheduledTime).getUTCDay() === 1
+          ? [sendWeeklyDigests(env)]
+          : []),
+      ]),
+    );
   },
 };

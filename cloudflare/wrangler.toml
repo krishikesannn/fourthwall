@@ -13,7 +13,7 @@ STUDIO_TIME_ZONE = "Asia/Kolkata"
 STUDIO_UTC_OFFSET_MINUTES = "330"
 
 [triggers]
-crons = ["0 4 * * 1"]
+crons = ["0 4 * * *"]
 
 [[d1_databases]]
 binding = "DB"

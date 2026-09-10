@@ -22,8 +22,9 @@ test('weekly digest is scheduled and dispatched by the Worker', () => {
   assert.match(worker, /async scheduled\(/);
   assert.match(worker, /weekly_digest=1/);
   assert.match(worker, /api\.resend\.com\/emails/);
+  assert.match(worker, /getUTCDay\(\) === 1/);
   for (const file of ['wrangler.toml', 'cloudflare/wrangler.toml']) {
-    assert.match(read(file), /crons = \["0 4 \* \* 1"\]/);
+    assert.match(read(file), /crons = \["0 4 \* \* \*"\]/);
   }
 });
 
