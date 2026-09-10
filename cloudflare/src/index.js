@@ -1336,7 +1336,7 @@ export default {
     if (url.pathname === "/api/analytics" && request.method === "GET") {
       const user = await userFromRequest(request, env);
       if (!studio(user)) return deny("Studio access required", 403);
-      const [leads, projects, overdue, time] = await Promise.all([
+      const [leads, projects, overdue, time, weeklyTime, revenue] = await Promise.all([
         env.DB.prepare(
           "select substr(created_at,1,7) month,count(*) total,sum(case when status='closed' then 1 else 0 end) closed from inquiries group by month order by month desc limit 12",
         ).all(),
@@ -1349,12 +1349,20 @@ export default {
         env.DB.prepare(
           "select p.name,sum(coalesce(te.minutes,cast((julianday('now')-julianday(te.started_at))*1440 as integer))) minutes from time_entries te join projects p on p.id=te.project_id group by p.id order by minutes desc",
         ).all(),
+        env.DB.prepare(
+          "select strftime('%Y-W%W',te.started_at) week,sum(coalesce(te.minutes,cast((julianday('now')-julianday(te.started_at))*1440 as integer))) minutes from time_entries te group by week order by week desc limit 12",
+        ).all(),
+        env.DB.prepare(
+          "select p.service,i.currency,sum(i.total) revenue,count(*) paid_invoices from invoices i join projects p on p.id=i.project_id where i.status='paid' group by p.service,i.currency order by revenue desc",
+        ).all(),
       ]);
       return json({
         leads: leads.results,
         projects: projects.results,
         overdue: overdue?.total || 0,
         time: time.results,
+        weeklyTime: weeklyTime.results,
+        revenue: revenue.results,
       });
     }
     if (url.pathname === "/api/export" && request.method === "GET") {
@@ -1422,14 +1430,25 @@ export default {
       )
         .bind(insightsMatch[1])
         .all();
-      const times = studio(user)
-        ? await env.DB.prepare(
-            "select te.*,u.display_name from time_entries te join users u on u.id=te.user_id where te.project_id=? order by te.started_at desc limit 100",
-          )
-            .bind(insightsMatch[1])
-            .all()
-        : { results: [] };
-      return json({ guidelines: guidelines.results, timeEntries: times.results });
+      const [times, weeklyTime] = studio(user)
+        ? await Promise.all([
+            env.DB.prepare(
+              "select te.*,u.display_name from time_entries te join users u on u.id=te.user_id where te.project_id=? order by te.started_at desc limit 100",
+            )
+              .bind(insightsMatch[1])
+              .all(),
+            env.DB.prepare(
+              "select strftime('%Y-W%W',started_at) week,sum(coalesce(minutes,cast((julianday('now')-julianday(started_at))*1440 as integer))) minutes from time_entries where project_id=? group by week order by week desc limit 12",
+            )
+              .bind(insightsMatch[1])
+              .all(),
+          ])
+        : [{ results: [] }, { results: [] }];
+      return json({
+        guidelines: guidelines.results,
+        timeEntries: times.results,
+        weeklyTime: weeklyTime.results,
+      });
     }
     const timeMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/time-entries$/);
     if (timeMatch && request.method === "POST") {
