@@ -643,6 +643,7 @@ async function refreshClient(projectId) {
         ...workspace,
         reviews: reviews.comments,
         posts: calendar.posts,
+        calendarMonth: calendar.month,
         announcements: announcements.announcements,
         onboarding,
         ...insights,
@@ -783,6 +784,7 @@ async function openProject(id) {
         ...workspace,
         reviews: reviews.comments,
         posts: calendar.posts,
+        calendarMonth: calendar.month,
         ...insights,
         ...commercial,
         teamMembers: permissions.members,
@@ -939,11 +941,34 @@ async function reactMoodboard(id, reaction, projectId) {
     toast(reason.message);
   }
 }
+let activeCalendarProject = null;
+function calendarMonthView(project, studioView) {
+  const month = project.calendarMonth || new Date().toISOString().slice(0, 7),
+    [year, monthNumber] = month.split("-").map(Number),
+    totalDays = new Date(year, monthNumber, 0).getDate(),
+    offset = new Date(year, monthNumber - 1, 1).getDay(),
+    days = Array.from({ length: offset }, () => '<span class="calendar-day calendar-day--blank"></span>');
+  for (let day = 1; day <= totalDays; day += 1) {
+    const date = `${month}-${String(day).padStart(2, "0")}`,
+      posts = project.posts.filter((post) => post.publish_at.slice(0, 10) === date);
+    days.push(`<article class="calendar-day"><strong>${day}</strong>${posts.map((post) => `<div class="calendar-post"><span>${esc(post.channel)}</span><b>${esc(post.title)}</b><small>${esc(stateTitle(post.status))}</small>${!studioView && post.status === "in_review" ? `<div class="actions"><button class="btn alt" onclick="contentFeedback('${esc(post.id)}','changes_requested','${esc(project.id)}')">CHANGES</button><button class="btn" onclick="contentFeedback('${esc(post.id)}','approved','${esc(project.id)}')">APPROVE</button></div>` : ""}${studioView && ["approved", "scheduled"].includes(post.status) ? `<button class="btn alt" onclick="setContentStatus('${esc(post.id)}','${post.status === "approved" ? "scheduled" : "published"}','${esc(project.id)}')">${post.status === "approved" ? "SCHEDULE" : "MARK PUBLISHED"}</button>` : ""}</div>`).join("")}</article>`);
+  }
+  const label = new Intl.DateTimeFormat(data.language || "en-IN", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(year, monthNumber - 1, 1));
+  return `<div class="calendar-toolbar"><button class="btn alt" aria-label="Previous month" onclick="changeContentMonth(-1)">←</button><h3>${esc(label)}</h3><button class="btn alt" aria-label="Next month" onclick="changeContentMonth(1)">→</button></div><div class="calendar-weekdays">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => `<span>${day}</span>`).join("")}</div><div class="calendar-month">${days.join("")}</div>`;
+}
 function reviewCalendarView(project, studioView = false) {
+  activeCalendarProject = project;
   const reviewable = project.files.filter(
     (f) => /^image\//.test(f.mime_type) || f.mime_type === "application/pdf",
   );
-  return `<section class="section"><span class="eyebrow">DESIGN REVIEW</span><h2>Pinned feedback</h2>${project.reviews.map((c) => `<article class="card update ${c.parent_id ? "review-reply" : ""}"><time>${c.parent_id ? "REPLY · " : ""}${esc(c.file_name)} · PAGE ${c.page_number}${c.pin_x !== null ? ` · ${Math.round(c.pin_x)}%, ${Math.round(c.pin_y)}%` : ""}</time><h3>${esc(c.author_name)}</h3><p>${esc(c.body)}</p><div class="actions"><button class="btn alt" onclick="replyDesignComment('${esc(c.id)}','${esc(c.file_id)}','${c.page_number}','${esc(project.id)}')">REPLY</button>${c.resolved_at ? '<span class="status">RESOLVED</span>' : studioView ? `<button class="btn alt" onclick="resolveDesignComment('${esc(c.id)}','${esc(project.id)}')">RESOLVE</button>` : ""}</div></article>`).join("") || empty()}${reviewable.length ? `<form class="card editor-form" onsubmit="addDesignComment(event,'${esc(project.id)}')"><label>Review file<select name="fileId">${reviewable.map((f) => `<option value="${esc(f.id)}">${esc(f.file_name)}</option>`).join("")}</select></label><div class="form-split"><label>Page<input name="pageNumber" type="number" min="1" value="1"></label><label>Pin X %<input name="pinX" type="number" min="0" max="100" value="50"></label><label>Pin Y %<input name="pinY" type="number" min="0" max="100" value="50"></label></div><label>Comment<textarea name="body" required></textarea></label><button class="btn">PIN COMMENT →</button></form>` : ""}</section><section class="section"><span class="eyebrow">CONTENT CALENDAR</span><h2>Monthly content</h2><div class="calendar-grid">${project.posts.map((post) => `<article class="card asset-card"><span class="eyebrow">${esc(post.publish_at.slice(0, 10))} · ${esc(post.channel)}</span><h3>${esc(post.title)}</h3><p>${esc(post.caption || "")}</p><span class="status">${esc(stateTitle(post.status))}</span>${!studioView && post.status === "in_review" ? `<div class="actions"><button class="btn alt" onclick="contentFeedback('${esc(post.id)}','changes_requested','${esc(project.id)}')">CHANGES</button><button class="btn" onclick="contentFeedback('${esc(post.id)}','approved','${esc(project.id)}')">APPROVE</button></div>` : ""}</article>`).join("") || empty()}</div>${studioView ? `<form class="card editor-form" onsubmit="createContentPost(event,'${esc(project.id)}')"><label>Post title<input name="title" required></label><div class="form-split"><label>Channel<input name="channel" required placeholder="Instagram"></label><label>Publish date<input name="publishAt" type="datetime-local" required></label></div><label>Caption<textarea name="caption"></textarea></label><label class="check-row"><input name="sendForApproval" type="checkbox" checked> Send for client approval</label><button class="btn">ADD TO CALENDAR →</button></form>` : ""}</section>`;
+  const review = `<section class="section"><span class="eyebrow">DESIGN REVIEW</span><h2>Pinned feedback</h2>${project.reviews.map((c) => `<article class="card update ${c.parent_id ? "review-reply" : ""}"><time>${c.parent_id ? "REPLY · " : ""}${esc(c.file_name)} · PAGE ${c.page_number}${c.pin_x !== null ? ` · ${Math.round(c.pin_x)}%, ${Math.round(c.pin_y)}%` : ""}</time><h3>${esc(c.author_name)}</h3><p>${esc(c.body)}</p><div class="actions"><button class="btn alt" onclick="replyDesignComment('${esc(c.id)}','${esc(c.file_id)}','${c.page_number}','${esc(project.id)}')">REPLY</button>${c.resolved_at ? '<span class="status">RESOLVED</span>' : studioView ? `<button class="btn alt" onclick="resolveDesignComment('${esc(c.id)}','${esc(project.id)}')">RESOLVE</button>` : ""}</div></article>`).join("") || empty()}${reviewable.length ? `<form class="card editor-form" onsubmit="addDesignComment(event,'${esc(project.id)}')"><label>Review file<select name="fileId">${reviewable.map((f) => `<option value="${esc(f.id)}">${esc(f.file_name)}</option>`).join("")}</select></label><div class="form-split"><label>Page<input name="pageNumber" type="number" min="1" value="1"></label><label>Pin X %<input name="pinX" type="number" min="0" max="100" value="50"></label><label>Pin Y %<input name="pinY" type="number" min="0" max="100" value="50"></label></div><label>Comment<textarea name="body" required></textarea></label><button class="btn">PIN COMMENT →</button></form>` : ""}</section>`;
+  const form = studioView
+    ? `<form class="card editor-form" onsubmit="createContentPost(event,'${esc(project.id)}')"><label>Post title<input name="title" required></label><div class="form-split"><label>Channel<input name="channel" required placeholder="Instagram"></label><label>Publish date<input name="publishAt" type="datetime-local" required></label></div><label>Caption<textarea name="caption"></textarea></label><label class="check-row"><input name="sendForApproval" type="checkbox" checked> Send for client approval</label><button class="btn">ADD TO CALENDAR →</button></form>`
+    : "";
+  return `${review}<section class="section"><span class="eyebrow">CONTENT CALENDAR</span><h2>Monthly content</h2>${calendarMonthView(project, studioView)}${form}</section>`;
 }
 const renderClientWithCollaboration = client;
 client = function (project) {
@@ -998,6 +1023,7 @@ async function createContentPost(event, projectId) {
   const form = event.currentTarget,
     values = Object.fromEntries(new FormData(form));
   values.sendForApproval = form.elements.sendForApproval.checked;
+  values.publishAt = new Date(values.publishAt).toISOString();
   try {
     await live(`/projects/${projectId}/content-posts`, {
       method: "POST",
@@ -1005,6 +1031,39 @@ async function createContentPost(event, projectId) {
     });
     await openProject(projectId);
     toast("Content post created.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function changeContentMonth(direction) {
+  if (!activeCalendarProject) return;
+  const [year, month] = (
+      activeCalendarProject.calendarMonth || new Date().toISOString().slice(0, 7)
+    )
+      .split("-")
+      .map(Number),
+    next = new Date(year, month - 1 + direction, 1).toISOString().slice(0, 7);
+  try {
+    const result = await live(
+      `/projects/${activeCalendarProject.id}/content-posts?month=${next}`,
+    );
+    activeCalendarProject.posts = result.posts;
+    activeCalendarProject.calendarMonth = result.month;
+    liveSession.user.role === "client"
+      ? client(activeCalendarProject)
+      : projectEditor(activeCalendarProject);
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function setContentStatus(id, status, projectId) {
+  try {
+    await live(`/content-posts/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+    await openProject(projectId);
+    toast(status === "published" ? "Post marked published." : "Post scheduled.");
   } catch (reason) {
     toast(reason.message);
   }

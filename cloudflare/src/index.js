@@ -2081,13 +2081,14 @@ export default {
       const user = await userFromRequest(request, env);
       if (!user || !(await canAccessProject(env, user, calendarMatch[1])))
         return deny("Project access required", 403);
-      const month = String(url.searchParams.get("month") || "").slice(0, 7);
+      const requestedMonth = String(url.searchParams.get("month") || ""),
+        month = /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth) ? requestedMonth : "";
       const rows = await env.DB.prepare(
         "select cp.*,(select decision from content_feedback where post_id=cp.id order by created_at desc limit 1) latest_decision,(select comment from content_feedback where post_id=cp.id order by created_at desc limit 1) latest_comment from content_posts cp where cp.project_id=? and (?='' or substr(cp.publish_at,1,7)=?) order by cp.publish_at",
       )
         .bind(calendarMatch[1], month, month)
         .all();
-      return json({ posts: rows.results });
+      return json({ month: month || new Date().toISOString().slice(0, 7), posts: rows.results });
     }
     if (calendarMatch && request.method === "POST") {
       const user = await userFromRequest(request, env);
@@ -2121,6 +2122,27 @@ export default {
         .run();
       await audit(env, user, calendarMatch[1], "created", "content_post", id, { title });
       return json({ id }, 201);
+    }
+    const contentPostMatch = url.pathname.match(/^\/api\/content-posts\/([^/]+)$/);
+    if (contentPostMatch && request.method === "PATCH") {
+      const user = await userFromRequest(request, env);
+      if (!studio(user)) return deny("Studio access required", 403);
+      const post = await env.DB.prepare("select project_id from content_posts where id=?")
+        .bind(contentPostMatch[1])
+        .first();
+      if (!post) return deny("Content post not found", 404);
+      const payload = await body(request),
+        status = ["draft", "in_review", "approved", "scheduled", "published"].includes(
+          payload?.status,
+        )
+          ? payload.status
+          : null;
+      if (!status) return deny("Invalid content status", 400);
+      await env.DB.prepare("update content_posts set status=?,updated_at=current_timestamp where id=?")
+        .bind(status, contentPostMatch[1])
+        .run();
+      await audit(env, user, post.project_id, status, "content_post", contentPostMatch[1]);
+      return json({ ok: true });
     }
     const feedbackMatch = url.pathname.match(/^\/api\/content-posts\/([^/]+)\/feedback$/);
     if (feedbackMatch && request.method === "POST") {

@@ -31,5 +31,5 @@ test('providers use verified server-side production APIs',()=>{
 
 test('client and studio expose invoices e-sign and booking flows',()=>{
   for(const token of ['PAY BY CARD / UPI','SEND FOR E-SIGN','BOOK WITH GOOGLE CALENDAR','createInvoice','createProposal','bookMeeting'])assert.match(app,new RegExp(token));
-  assert.match(read('pwa/sw.js'),/fourth-wall-v10/);
+  assert.match(read('pwa/sw.js'),/fourth-wall-v(?:1[1-9]|[2-9]\d)/);
 });
