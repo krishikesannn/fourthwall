@@ -141,6 +141,112 @@ async function signedStorageUrl(env, path) {
   const value = await response.json();
   return `${env.SUPABASE_URL}/storage/v1${value.signedURL}`;
 }
+function pdfText(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7e]/g, "")
+    .replace(/([\\()])/g, "\\$1");
+}
+function wrapPdf(value, width = 76) {
+  const words = pdfText(value).split(/\s+/).filter(Boolean),
+    lines = [];
+  let line = "";
+  for (const word of words) {
+    if (`${line} ${word}`.trim().length > width && line) {
+      lines.push(line);
+      line = word;
+    } else line = `${line} ${word}`.trim();
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+function proposalPdf(proposal, blocks, branding = {}) {
+  const studioName = pdfText(branding.studio_name || "The Fourth Wall"),
+    lines = [
+      { text: studioName.toUpperCase(), size: 11, font: "F1", gap: 28 },
+      { text: pdfText(proposal.title), size: 27, font: "F2", gap: 40 },
+      ...wrapPdf(proposal.introduction || "A considered proposal for your next chapter.").map(
+        (text) => ({ text, size: 11, font: "F1", gap: 16 }),
+      ),
+      { text: "SERVICES & INVESTMENT", size: 10, font: "F1", gap: 30 },
+    ];
+  blocks.forEach((block, index) => {
+    lines.push({ text: `${index + 1}. ${pdfText(block.title)}`, size: 15, font: "F2", gap: 22 });
+    wrapPdf(block.description, 82)
+      .slice(0, 3)
+      .forEach((text) => lines.push({ text, size: 9, font: "F1", gap: 13 }));
+    lines.push({
+      text: new Intl.NumberFormat("en-IN", {
+        style: "currency",
+        currency: proposal.currency || "INR",
+        maximumFractionDigits: 0,
+      })
+        .format((Number(block.amount) || 0) / 100)
+        .replace(/[^\x20-\x7e]/g, "INR "),
+      size: 11,
+      font: "F1",
+      gap: 22,
+    });
+  });
+  lines.push({
+    text: `TOTAL  ${new Intl.NumberFormat("en-IN").format((Number(proposal.total) || 0) / 100)} ${pdfText(proposal.currency || "INR")}`,
+    size: 14,
+    font: "F2",
+    gap: 30,
+  });
+  lines.push({ text: "Prepared with care. Valid for 30 days.", size: 9, font: "F1", gap: 15 });
+  let y = 748,
+    stream = "0.055 0.22 0.196 rg 48 770 499 24 re f\n";
+  for (const line of lines.slice(0, 42)) {
+    stream += `BT /${line.font} ${line.size} Tf 0.055 0.22 0.196 rg 54 ${Math.max(54, y)} Td (${line.text}) Tj ET\n`;
+    y -= line.gap;
+  }
+  const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>",
+      `<< /Length ${stream.length} >>\nstream\n${stream}endstream`,
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold >>",
+    ],
+    offsets = [0];
+  let output = "%PDF-1.4\n";
+  objects.forEach((object, index) => {
+    offsets.push(output.length);
+    output += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = output.length;
+  output += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    output += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  output += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return encoder.encode(output);
+}
+async function uploadGeneratedPdf(env, proposal, blocks, branding, userId) {
+  if (!storageReady(env)) throw Error("Secure file storage is not configured");
+  const bytes = proposalPdf(proposal, blocks, branding),
+    fileId = crypto.randomUUID(),
+    fileName = `${safeFileName(proposal.title)}.pdf`,
+    storagePath = `${proposal.project_id}/proposals/${fileId}-${fileName}`,
+    endpoint = `${env.SUPABASE_URL}/storage/v1/object/${encodeURIComponent(env.SUPABASE_STORAGE_BUCKET)}/${storagePath.split("/").map(encodeURIComponent).join("/")}`,
+    stored = await fetch(endpoint, {
+      method: "POST",
+      headers: { ...storageHeaders(env, "application/pdf"), "x-upsert": "false" },
+      body: bytes,
+    });
+  if (!stored.ok) throw Error(`Proposal PDF upload failed (${stored.status})`);
+  await env.DB.batch([
+    env.DB.prepare(
+      "insert into project_files(id,project_id,storage_path,file_name,mime_type,size_bytes,version,uploaded_by) values(?,?,?,?,?,?,1,?)",
+    ).bind(fileId, proposal.project_id, storagePath, fileName, "application/pdf", bytes.byteLength, userId),
+    env.DB.prepare("update proposals set pdf_file_id=?,updated_at=current_timestamp where id=?").bind(
+      fileId,
+      proposal.id,
+    ),
+  ]);
+  return { fileId, fileName, size: bytes.byteLength };
+}
 async function dropboxSignRequest(env, proposal, client, fileUrl) {
   if (!env.DROPBOX_SIGN_API_KEY) throw Error("Dropbox Sign is not configured");
   const response = await fetch("https://api.hellosign.com/v3/signature_request/send", {
@@ -775,13 +881,43 @@ export default {
       }
       return json({ ok: true });
     }
+    if (url.pathname === "/api/webhooks/dropbox-sign" && request.method === "POST") {
+      if (!env.DROPBOX_SIGN_API_KEY) return deny("Webhook is not configured", 503);
+      const form = await request.formData(),
+        event = JSON.parse(String(form.get("json") || "{}")),
+        eventType = String(event?.event?.event_type || ""),
+        eventTime = String(event?.event?.event_time || ""),
+        eventHash = String(event?.event?.event_hash || ""),
+        expected = await digest(`${eventTime}${eventType}${env.DROPBOX_SIGN_API_KEY}`);
+      if (!eventHash || eventHash !== expected) return deny("Invalid webhook signature", 401);
+      const requestId = event?.signature_request?.signature_request_id;
+      if (eventType === "signature_request_all_signed" && requestId) {
+        const proposal = await env.DB.prepare(
+          "select id,project_id from proposals where signature_request_id=?",
+        )
+          .bind(requestId)
+          .first();
+        if (proposal) {
+          await env.DB.prepare(
+            "update proposals set status='signed',signed_at=current_timestamp,updated_at=current_timestamp where id=?",
+          )
+            .bind(proposal.id)
+            .run();
+          await audit(env, null, proposal.project_id, "signed", "proposal", proposal.id, {
+            provider: "dropbox_sign",
+            requestId,
+          });
+        }
+      }
+      return new Response("Hello API Event Received", { status: 200 });
+    }
     const commercialMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/commercial$/);
     if (commercialMatch && request.method === "GET") {
       const user = await userFromRequest(request, env),
         projectId = commercialMatch[1];
       if (!user || !(await canAccessProject(env, user, projectId)))
         return deny("Project access required", 403);
-      const [invoices, proposals, meetings, availability] = await Promise.all([
+      const [invoices, proposals, meetings, availability, serviceTemplates] = await Promise.all([
         env.DB.prepare(
           "select * from invoices where project_id=? and (?=1 or status!='draft') order by created_at desc",
         )
@@ -798,12 +934,18 @@ export default {
         env.DB.prepare(
           "select id,weekday,start_time,end_time,active from studio_availability order by weekday,start_time",
         ).all(),
+        studio(user)
+          ? env.DB.prepare(
+              "select id,title,description,amount,currency from proposal_service_templates where active=1 order by created_at",
+            ).all()
+          : Promise.resolve({ results: [] }),
       ]);
       return json({
         invoices: invoices.results,
         proposals: proposals.results,
         meetings: meetings.results,
         availability: availability.results,
+        serviceTemplates: serviceTemplates.results,
         providers: {
           razorpay: Boolean(env.RAZORPAY_KEY_ID),
           dropboxSign: Boolean(env.DROPBOX_SIGN_API_KEY),
@@ -1005,7 +1147,82 @@ export default {
         ),
       ]);
       await audit(env, user, proposalsMatch[1], "created", "proposal", id, { title, total });
-      return json({ id, total }, 201);
+      let generated = null;
+      if (storageReady(env) && !p?.pdfFileId) {
+        try {
+          const branding =
+            (await env.DB.prepare("select * from studio_branding where id=1").first()) || {};
+          generated = await uploadGeneratedPdf(
+            env,
+            {
+              id,
+              project_id: proposalsMatch[1],
+              title,
+              introduction: String(p?.introduction || "").slice(0, 5000),
+              currency: String(p?.currency || "INR").slice(0, 3),
+              total,
+            },
+            blocks,
+            branding,
+            user.id,
+          );
+          await audit(env, user, proposalsMatch[1], "generated", "proposal_pdf", generated.fileId);
+        } catch (error) {
+          console.error("Proposal PDF generation failed", error);
+        }
+      }
+      return json({ id, total, generated }, 201);
+    }
+    const proposalPdfMatch = url.pathname.match(/^\/api\/proposals\/([^/]+)\/generate-pdf$/);
+    if (proposalPdfMatch && request.method === "POST") {
+      const user = await userFromRequest(request, env);
+      if (!studio(user)) return deny("Studio access required", 403);
+      const proposal = await env.DB.prepare("select * from proposals where id=?")
+        .bind(proposalPdfMatch[1])
+        .first();
+      if (!proposal) return deny("Proposal not found", 404);
+      const [blocks, branding] = await Promise.all([
+        env.DB.prepare("select * from proposal_blocks where proposal_id=? order by sort_order")
+          .bind(proposal.id)
+          .all(),
+        env.DB.prepare("select * from studio_branding where id=1").first(),
+      ]);
+      try {
+        const generated = await uploadGeneratedPdf(
+          env,
+          proposal,
+          blocks.results,
+          branding || {},
+          user.id,
+        );
+        await audit(env, user, proposal.project_id, "generated", "proposal_pdf", generated.fileId);
+        return json({ generated }, 201);
+      } catch (error) {
+        return deny(error.message, 503);
+      }
+    }
+    if (url.pathname === "/api/proposal-services" && request.method === "POST") {
+      const user = await userFromRequest(request, env);
+      if (!studio(user)) return deny("Studio access required", 403);
+      const p = await body(request),
+        title = String(p?.title || "").trim().slice(0, 180),
+        amount = Math.max(0, Math.round(Number(p?.amount) || 0));
+      if (!title) return deny("Service title is required", 400);
+      const id = crypto.randomUUID();
+      await env.DB.prepare(
+        "insert into proposal_service_templates(id,title,description,amount,currency,created_by) values(?,?,?,?,?,?)",
+      )
+        .bind(
+          id,
+          title,
+          String(p?.description || "").slice(0, 3000),
+          amount,
+          String(p?.currency || "INR").slice(0, 3),
+          user.id,
+        )
+        .run();
+      await audit(env, user, null, "created", "proposal_service_template", id, { title, amount });
+      return json({ id }, 201);
     }
     const signRequestMatch = url.pathname.match(/^\/api\/proposals\/([^/]+)\/send-signature$/);
     if (signRequestMatch && request.method === "POST") {

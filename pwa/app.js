@@ -1147,12 +1147,12 @@ function commercialView(project, studioView = false) {
       .filter((rule) => Number(rule.active))
       .map((rule) => `${dayNames[rule.weekday]} ${rule.start_time}–${rule.end_time}`)
       .join(" · ");
-  return `<section class="section"><span class="eyebrow">INVOICES & PAYMENTS</span><h2>${studioView ? "Commercial desk" : "Your invoices"}</h2>${project.invoices.map((i) => `<article class="card row"><div><h3>${esc(i.invoice_number)}</h3><p>${money(i.total, i.currency)} · Due ${esc(i.due_date || "on receipt")}</p></div><div><span class="status">${esc(stateTitle(i.status))}</span>${!studioView && i.status !== "paid" && i.status !== "void" ? `<button class="btn" onclick="payInvoice('${esc(i.id)}')">PAY BY CARD / UPI →</button>` : ""}</div></article>`).join("") || empty()}${studioView ? `<form class="card editor-form" onsubmit="createInvoice(event,'${esc(project.id)}')"><h3>Create invoice</h3><label>Description<input name="description" required placeholder="Brand identity engagement"></label><div class="form-split"><label>Amount (₹)<input name="amount" type="number" min="1" step="0.01" required></label><label>Tax (₹)<input name="tax" type="number" min="0" step="0.01" value="0"></label><label>Due date<input name="dueDate" type="date"></label></div><label class="check-row"><input name="sendNow" type="checkbox" checked> Send to client</label><button class="btn">CREATE INVOICE →</button></form>` : ""}</section><section class="section"><span class="eyebrow">PROPOSALS & CONTRACTS</span><h2>Agreements</h2>${project.proposals.map((p) => `<article class="card row"><div><h3>${esc(p.title)}</h3><p>${money(p.total, p.currency)}</p></div><div><span class="status">${esc(stateTitle(p.status))}</span>${studioView && p.pdf_file_id && p.status !== "signed" ? `<button class="btn" onclick="sendProposal('${esc(p.id)}','${esc(project.id)}')">SEND FOR E-SIGN →</button>` : ""}</div></article>`).join("") || empty()}${
+  return `<section class="section"><span class="eyebrow">INVOICES & PAYMENTS</span><h2>${studioView ? "Commercial desk" : "Your invoices"}</h2>${project.invoices.map((i) => `<article class="card row"><div><h3>${esc(i.invoice_number)}</h3><p>${money(i.total, i.currency)} · Due ${esc(i.due_date || "on receipt")}</p></div><div><span class="status">${esc(stateTitle(i.status))}</span>${!studioView && i.status !== "paid" && i.status !== "void" ? `<button class="btn" onclick="payInvoice('${esc(i.id)}')">PAY BY CARD / UPI →</button>` : ""}</div></article>`).join("") || empty()}${studioView ? `<form class="card editor-form" onsubmit="createInvoice(event,'${esc(project.id)}')"><h3>Create invoice</h3><label>Description<input name="description" required placeholder="Brand identity engagement"></label><div class="form-split"><label>Amount (₹)<input name="amount" type="number" min="1" step="0.01" required></label><label>Tax (₹)<input name="tax" type="number" min="0" step="0.01" value="0"></label><label>Due date<input name="dueDate" type="date"></label></div><label class="check-row"><input name="sendNow" type="checkbox" checked> Send to client</label><button class="btn">CREATE INVOICE →</button></form>` : ""}</section><section class="section"><span class="eyebrow">PROPOSALS & CONTRACTS</span><h2>Agreements</h2>${project.proposals.map((p) => `<article class="card row"><div><h3>${esc(p.title)}</h3><p>${money(p.total, p.currency)}</p></div><div><span class="status">${esc(stateTitle(p.status))}</span>${p.pdf_file_id ? `<button class="btn alt" onclick="downloadProjectFile('${esc(p.pdf_file_id)}','${esc(p.title)}.pdf')">PDF ↓</button>` : studioView ? `<button class="btn alt" onclick="generateProposalPdf('${esc(p.id)}','${esc(project.id)}')">GENERATE PDF</button>` : ""}${studioView && p.pdf_file_id && p.status !== "signed" ? `<button class="btn" onclick="sendProposal('${esc(p.id)}','${esc(project.id)}')">SEND FOR E-SIGN →</button>` : ""}</div></article>`).join("") || empty()}${
     studioView
-      ? `<form class="card editor-form" onsubmit="createProposal(event,'${esc(project.id)}')"><h3>Build a proposal</h3><label>Title<input name="title" required placeholder="Brand transformation proposal"></label><label>Introduction<textarea name="introduction"></textarea></label><label>Service block<input name="blockTitle" required placeholder="Strategy and identity"></label><label>Block description<textarea name="description"></textarea></label><label>Price (₹)<input name="amount" type="number" min="0" step="0.01" required></label><label>Branded proposal PDF<select name="pdfFileId"><option value="">Attach later</option>${project.files
+      ? `<form class="card editor-form" onsubmit="createProposal(event,'${esc(project.id)}')"><h3>Build a branded proposal</h3><label>Title<input name="title" required placeholder="Brand transformation proposal"></label><label>Introduction<textarea name="introduction"></textarea></label><label>Start from a reusable service<select onchange="applyProposalTemplate(this)"><option value="">Custom service</option>${(project.serviceTemplates || []).map((item) => `<option data-title="${esc(item.title)}" data-description="${esc(item.description || "")}" data-amount="${Number(item.amount) / 100}">${esc(item.title)} · ${money(item.amount, item.currency)}</option>`).join("")}</select></label><label>Service block<input name="blockTitle" required placeholder="Strategy and identity"></label><label>Block description<textarea name="description"></textarea></label><label>Price (₹)<input name="amount" type="number" min="0" step="0.01" required></label><label>Optional existing PDF<select name="pdfFileId"><option value="">Generate branded PDF automatically</option>${project.files
           .filter((f) => f.mime_type === "application/pdf")
           .map((f) => `<option value="${esc(f.id)}">${esc(f.file_name)}</option>`)
-          .join("")}</select></label><button class="btn">CREATE PROPOSAL →</button></form>`
+          .join("")}</select></label><button class="btn">CREATE PROPOSAL + PDF →</button></form><details class="card"><summary>SAVE A REUSABLE SERVICE</summary><form class="editor-form" onsubmit="saveProposalService(event,'${esc(project.id)}')"><label>Service title<input name="title" required></label><label>Description<textarea name="description"></textarea></label><label>Price (₹)<input name="amount" type="number" min="0" step="0.01" required></label><button class="btn">SAVE SERVICE →</button></form></details>`
       : ""
   }</section><section class="section"><span class="eyebrow">MEETINGS</span><h2>Studio calendar</h2><p class="muted">Available in Asia/Kolkata: ${esc(availabilityText || "Contact the studio for availability")}</p>${project.meetings.map((m) => `<article class="card row"><div><h3>${esc(m.title)}</h3><p>${new Date(m.starts_at).toLocaleString()} · ${m.duration_minutes} min</p></div>${m.join_url ? `<a class="btn" href="${esc(m.join_url)}" target="_blank" rel="noopener">JOIN →</a>` : `<span class="status">${esc(stateTitle(m.status))}</span>`}</article>`).join("") || empty()}<form class="card editor-form" onsubmit="bookMeeting(event,'${esc(project.id)}')"><h3>${studioView ? "Schedule a client meeting" : "Book time with the studio"}</h3><label>Meeting title<input name="title" required value="Project check-in"></label><div class="form-split"><label>Date and time<input name="startsAt" type="datetime-local" required></label><label>Duration<select name="durationMinutes"><option>30</option><option>45</option><option>60</option></select></label></div><button class="btn">BOOK WITH GOOGLE CALENDAR →</button></form>${studioView ? `<details class="card"><summary>EDIT WEEKLY AVAILABILITY</summary><form class="editor-form" onsubmit="saveAvailability(event,'${esc(project.id)}')"><p class="muted">One time window per day. Leave both fields blank to close that day.</p>${dayNames.slice(1, 7).map((day, index) => { const rule = availability.find((item) => Number(item.weekday) === index + 1 && Number(item.active)); return `<div class="form-split"><span>${day}</span><label>From<input type="time" name="start-${index + 1}" value="${esc(rule?.start_time || "")}"></label><label>To<input type="time" name="end-${index + 1}" value="${esc(rule?.end_time || "")}"></label></div>`; }).join("")}<button class="btn">SAVE AVAILABILITY →</button></form></details>` : ""}</section>`;
 }
@@ -1222,6 +1222,37 @@ async function createProposal(event, projectId) {
     });
     await openProject(projectId);
     toast("Proposal created.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+function applyProposalTemplate(select) {
+  const option = select.selectedOptions[0],
+    form = select.form;
+  if (!option?.dataset.title) return;
+  form.elements.blockTitle.value = option.dataset.title;
+  form.elements.description.value = option.dataset.description;
+  form.elements.amount.value = option.dataset.amount;
+}
+async function saveProposalService(event, projectId) {
+  event.preventDefault();
+  const values = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await live("/proposal-services", {
+      method: "POST",
+      body: JSON.stringify({ ...values, amount: Math.round(Number(values.amount) * 100) }),
+    });
+    await openProject(projectId);
+    toast("Reusable service saved.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function generateProposalPdf(id, projectId) {
+  try {
+    await live(`/proposals/${id}/generate-pdf`, { method: "POST", body: "{}" });
+    await openProject(projectId);
+    toast("Branded proposal PDF generated.");
   } catch (reason) {
     toast(reason.message);
   }
