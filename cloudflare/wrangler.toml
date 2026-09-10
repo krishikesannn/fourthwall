@@ -9,6 +9,8 @@ SUPABASE_STORAGE_BUCKET = "project-files"
 PUBLIC_APP_URL = "https://fourthwall.pages.dev/pwa/"
 INQUIRY_NOTIFICATION_TO = "thefourthwall04.co@gmail.com"
 DROPBOX_SIGN_TEST_MODE = "true"
+STUDIO_TIME_ZONE = "Asia/Kolkata"
+STUDIO_UTC_OFFSET_MINUTES = "330"
 
 [triggers]
 crons = ["0 4 * * 1"]

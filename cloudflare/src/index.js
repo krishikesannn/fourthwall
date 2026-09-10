@@ -781,7 +781,7 @@ export default {
         projectId = commercialMatch[1];
       if (!user || !(await canAccessProject(env, user, projectId)))
         return deny("Project access required", 403);
-      const [invoices, proposals, meetings] = await Promise.all([
+      const [invoices, proposals, meetings, availability] = await Promise.all([
         env.DB.prepare(
           "select * from invoices where project_id=? and (?=1 or status!='draft') order by created_at desc",
         )
@@ -795,17 +795,69 @@ export default {
         env.DB.prepare("select * from meetings where project_id=? order by starts_at desc")
           .bind(projectId)
           .all(),
+        env.DB.prepare(
+          "select id,weekday,start_time,end_time,active from studio_availability order by weekday,start_time",
+        ).all(),
       ]);
       return json({
         invoices: invoices.results,
         proposals: proposals.results,
         meetings: meetings.results,
+        availability: availability.results,
         providers: {
           razorpay: Boolean(env.RAZORPAY_KEY_ID),
           dropboxSign: Boolean(env.DROPBOX_SIGN_API_KEY),
           googleCalendar: Boolean(env.GOOGLE_SERVICE_ACCOUNT_EMAIL),
         },
       });
+    }
+    if (url.pathname === "/api/availability" && request.method === "GET") {
+      const user = await userFromRequest(request, env);
+      if (!user) return deny("Sign in required", 401);
+      const rows = await env.DB.prepare(
+        "select id,weekday,start_time,end_time,active from studio_availability order by weekday,start_time",
+      ).all();
+      return json({
+        timeZone: env.STUDIO_TIME_ZONE || "Asia/Kolkata",
+        rules: rows.results,
+      });
+    }
+    if (url.pathname === "/api/availability" && request.method === "PUT") {
+      const user = await userFromRequest(request, env);
+      if (!studio(user)) return deny("Studio access required", 403);
+      const p = await body(request),
+        rules = (Array.isArray(p?.rules) ? p.rules : []).slice(0, 28).map((rule) => ({
+          id: String(rule.id || crypto.randomUUID()),
+          weekday: Number(rule.weekday),
+          startTime: String(rule.startTime || rule.start_time || ""),
+          endTime: String(rule.endTime || rule.end_time || ""),
+          active: rule.active === false || Number(rule.active) === 0 ? 0 : 1,
+        }));
+      if (
+        !rules.length ||
+        rules.some(
+          (rule) =>
+            !Number.isInteger(rule.weekday) ||
+            rule.weekday < 0 ||
+            rule.weekday > 6 ||
+            !/^([01]\d|2[0-3]):[0-5]\d$/.test(rule.startTime) ||
+            !/^([01]\d|2[0-3]):[0-5]\d$/.test(rule.endTime) ||
+            rule.startTime >= rule.endTime,
+        )
+      )
+        return deny("Add at least one valid availability window", 400);
+      await env.DB.batch([
+        env.DB.prepare("delete from studio_availability"),
+        ...rules.map((rule) =>
+          env.DB.prepare(
+            "insert into studio_availability(id,weekday,start_time,end_time,active,created_by) values(?,?,?,?,?,?)",
+          ).bind(rule.id, rule.weekday, rule.startTime, rule.endTime, rule.active, user.id),
+        ),
+      ]);
+      await audit(env, user, null, "updated", "studio_availability", "weekly-hours", {
+        rules: rules.length,
+      });
+      return json({ ok: true });
     }
     const invoicesMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/invoices$/);
     if (invoicesMatch && request.method === "POST") {
@@ -1007,6 +1059,31 @@ export default {
           .slice(0, 180);
       if (Number.isNaN(startsAt.valueOf()) || startsAt.getTime() < Date.now())
         return deny("Choose a future meeting time", 400);
+      const offset = Number(env.STUDIO_UTC_OFFSET_MINUTES || 330),
+        localStart = new Date(startsAt.getTime() + offset * 60000),
+        weekday = localStart.getUTCDay(),
+        startMinutes = localStart.getUTCHours() * 60 + localStart.getUTCMinutes(),
+        endMinutes = startMinutes + duration,
+        windows = (
+          await env.DB.prepare(
+            "select start_time,end_time from studio_availability where weekday=? and active=1",
+          )
+            .bind(weekday)
+            .all()
+        ).results,
+        withinHours = windows.some((window) => {
+          const [startHour, startMinute] = window.start_time.split(":").map(Number),
+            [endHour, endMinute] = window.end_time.split(":").map(Number);
+          return startMinutes >= startHour * 60 + startMinute && endMinutes <= endHour * 60 + endMinute;
+        });
+      if (!withinHours)
+        return deny(`Choose a time within studio availability (${env.STUDIO_TIME_ZONE || "Asia/Kolkata"})`, 409);
+      const conflict = await env.DB.prepare(
+        "select id from meetings where status in ('requested','confirmed') and julianday(?) < julianday(starts_at,'+' || duration_minutes || ' minutes') and julianday(?,'+' || ? || ' minutes') > julianday(starts_at) limit 1",
+      )
+        .bind(startsAt.toISOString(), startsAt.toISOString(), duration)
+        .first();
+      if (conflict) return deny("That time is no longer available. Choose another slot.", 409);
       const id = crypto.randomUUID(),
         meeting = {
           id,
