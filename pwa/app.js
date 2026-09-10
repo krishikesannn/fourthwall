@@ -368,10 +368,32 @@ async function openOperations() {
   try {
     const data = await live("/operations"),
       dialog = document.createElement("dialog");
-    dialog.innerHTML = `<section class="modal operations"><button class="close" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">STUDIO OPERATIONS</span><h2>People and systems.</h2><div class="metrics"><article class="card metric"><span>CONTACTS</span><strong>${data.contacts.length}</strong></article><article class="card metric"><span>TEAM</span><strong>${data.team.length}</strong></article><article class="card metric"><span>FOLLOW-UPS</span><strong>${data.leadActivities.filter((x) => x.follow_up_at).length}</strong></article></div><section class="section"><h3>Client CRM</h3>${data.contacts.map((c) => `<article class="card row"><div><b>${esc(c.name)}</b><p>${esc(c.company || c.email)}${c.renewal_at ? " · Renewal " + esc(c.renewal_at) : ""}</p></div></article>`).join("") || empty()}<form class="editor-form" onsubmit="createOperation(event,'contacts')"><input name="name" required placeholder="Contact name"><input name="email" type="email" required placeholder="Email"><input name="company" placeholder="Company"><input name="renewalAt" type="date"><button class="btn">ADD CONTACT</button></form></section><section class="section"><h3>Update templates</h3>${data.templates.map((t) => `<article class="card update"><h3>${esc(t.name)}</h3><p>${esc(t.title)}</p></article>`).join("") || empty()}<form class="editor-form" onsubmit="createOperation(event,'update-templates')"><input name="name" required placeholder="Template name"><input name="title" required placeholder="Update title"><textarea name="body" required placeholder="Reusable update text"></textarea><button class="btn">SAVE TEMPLATE</button></form></section><section class="section"><h3>Broadcast</h3><form class="editor-form" onsubmit="createOperation(event,'announcements')"><input name="title" required placeholder="Announcement title"><textarea name="body" required placeholder="Message to active clients"></textarea><button class="btn">PUBLISH</button></form></section></section>`;
+    const team = data.team
+      .map(
+        (member) =>
+          `<form class="card editor-form" onsubmit="updateTeamMember(event,'${esc(member.id)}')"><div><b>${esc(member.display_name)}</b><p>${esc(member.email)}</p></div><label>Role<select name="teamRole">${["owner", "designer", "developer", "freelancer"].map((role) => `<option value="${role}" ${role === (member.team_role || (member.role === "admin" ? "owner" : "freelancer")) ? "selected" : ""}>${stateTitle(role)}</option>`).join("")}</select></label><label class="check-row"><input name="active" type="checkbox" ${member.active !== 0 ? "checked" : ""}> Active account</label><button class="btn alt">SAVE MEMBER</button></form>`,
+      )
+      .join("");
+    dialog.innerHTML = `<section class="modal operations"><button class="close" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">STUDIO OPERATIONS</span><h2>People and systems.</h2><div class="metrics"><article class="card metric"><span>CONTACTS</span><strong>${data.contacts.length}</strong></article><article class="card metric"><span>TEAM</span><strong>${data.team.length}</strong></article><article class="card metric"><span>FOLLOW-UPS</span><strong>${data.leadActivities.filter((x) => x.follow_up_at).length}</strong></article></div><section class="section"><h3>Team roster</h3>${team || empty()}<details class="card"><summary>ADD TEAM MEMBER</summary><form class="editor-form" onsubmit="createOperation(event,'team')"><input name="displayName" required placeholder="Full name"><input name="email" type="email" required placeholder="Email"><select name="teamRole">${["designer", "developer", "freelancer", "owner"].map((role) => `<option value="${role}">${stateTitle(role)}</option>`).join("")}</select><input name="temporaryPassword" type="password" minlength="12" required placeholder="Temporary password (12+ characters)"><button class="btn">CREATE TEAM LOGIN</button></form></details></section><section class="section"><h3>Client CRM</h3>${data.contacts.map((c) => `<article class="card row"><div><b>${esc(c.name)}</b><p>${esc(c.company || c.email)}${c.renewal_at ? " · Renewal " + esc(c.renewal_at) : ""}</p></div></article>`).join("") || empty()}<form class="editor-form" onsubmit="createOperation(event,'contacts')"><input name="name" required placeholder="Contact name"><input name="email" type="email" required placeholder="Email"><input name="company" placeholder="Company"><input name="renewalAt" type="date"><button class="btn">ADD CONTACT</button></form></section><section class="section"><h3>Update templates</h3>${data.templates.map((t) => `<article class="card update"><h3>${esc(t.name)}</h3><p>${esc(t.title)}</p></article>`).join("") || empty()}<form class="editor-form" onsubmit="createOperation(event,'update-templates')"><input name="name" required placeholder="Template name"><input name="title" required placeholder="Update title"><textarea name="body" required placeholder="Reusable update text"></textarea><button class="btn">SAVE TEMPLATE</button></form></section><section class="section"><h3>Broadcast</h3><form class="editor-form" onsubmit="createOperation(event,'announcements')"><input name="title" required placeholder="Announcement title"><textarea name="body" required placeholder="Message to active clients"></textarea><button class="btn">PUBLISH</button></form></section></section>`;
     document.body.append(dialog);
     dialog.showModal();
     dialog.addEventListener("close", () => dialog.remove());
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
+async function updateTeamMember(event, id) {
+  event.preventDefault();
+  const form = event.currentTarget,
+    values = Object.fromEntries(new FormData(form));
+  try {
+    await live(`/team/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ teamRole: values.teamRole, active: form.elements.active.checked }),
+    });
+    form.closest("dialog").close();
+    await openOperations();
+    toast("Team member updated.");
   } catch (reason) {
     toast(reason.message);
   }
@@ -779,6 +801,7 @@ async function openProject(id) {
       insights,
       commercial,
       permissions,
+      operations,
     ] = await Promise.all([
       live(`/projects/${id}`),
       live(`/projects/${id}/updates`),
@@ -795,6 +818,7 @@ async function openProject(id) {
         providers: {},
       })),
       live(`/projects/${id}/permissions`),
+      live("/update-templates"),
     ]);
     projectEditor(
       mapProject(detail.project, detail.deliverables, updates.updates, files.files, assets.assets, {
@@ -805,6 +829,7 @@ async function openProject(id) {
         ...insights,
         ...commercial,
         teamMembers: permissions.members,
+        updateTemplates: operations.templates,
       }),
     );
   } catch (reason) {
@@ -1257,12 +1282,54 @@ const renderEditorWithOperations = projectEditor;
 projectEditor = function (project) {
   renderEditorWithOperations(project);
   const updateForm = $("#updateForm");
+  if (project.updateTemplates?.length)
+    updateForm?.insertAdjacentHTML(
+      "afterbegin",
+      `<label>Start from an update template<select onchange="applyUpdateTemplate(this)"><option value="">Write from scratch</option>${project.updateTemplates.map((template) => `<option data-title="${esc(template.title)}" data-body="${esc(template.body)}">${esc(template.name)}</option>`).join("")}</select></label>`,
+    );
   updateForm?.insertAdjacentHTML(
     "beforeend",
     `<label>Attachment<select name="attachmentFileId"><option value="">No attachment</option>${project.files.map((f) => `<option value="${esc(f.id)}">${esc(f.file_name)}</option>`).join("")}</select></label><label>Schedule publishing (optional)<input name="scheduledAt" type="datetime-local"></label>`,
   );
+  const permissionCards = (project.teamMembers || [])
+    .map(
+      (member) =>
+        liveSession.user.role === "admin"
+          ? `<form class="card editor-form" onsubmit="saveProjectPermission(event,'${esc(project.id)}','${esc(member.id)}')"><b>${esc(member.display_name)}</b><small>${esc(member.team_role || (member.role === "admin" ? "owner" : "studio member"))}</small><label class="check-row"><input name="canEdit" type="checkbox" ${member.can_edit ? "checked" : ""}> Edit project</label><label class="check-row"><input name="canUpload" type="checkbox" ${member.can_upload ? "checked" : ""}> Upload files</label><label class="check-row"><input name="canInvoice" type="checkbox" ${member.can_invoice ? "checked" : ""}> Manage invoices</label><button class="btn alt">SAVE ACCESS</button></form>`
+          : `<article class="card row"><div><b>${esc(member.display_name)}</b><p>${esc(member.team_role || "Studio member")}</p></div></article>`,
+    )
+    .join("");
+  $(".screen").insertAdjacentHTML(
+    "beforeend",
+    `<section class="section"><span class="eyebrow">PROJECT ACCESS</span><h2>Team permissions</h2>${permissionCards || empty()}</section>`,
+  );
   $(".screen").insertAdjacentHTML("beforeend", insightView(project, true));
 };
+function applyUpdateTemplate(select) {
+  const option = select.selectedOptions[0],
+    form = select.form;
+  if (!option?.dataset.title) return;
+  form.elements.title.value = option.dataset.title;
+  form.elements.body.value = option.dataset.body;
+}
+async function saveProjectPermission(event, projectId, userId) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    await live(`/projects/${projectId}/permissions`, {
+      method: "POST",
+      body: JSON.stringify({
+        userId,
+        canEdit: form.elements.canEdit.checked,
+        canUpload: form.elements.canUpload.checked,
+        canInvoice: form.elements.canInvoice.checked,
+      }),
+    });
+    toast("Project access saved.");
+  } catch (reason) {
+    toast(reason.message);
+  }
+}
 async function createGuideline(event, projectId) {
   event.preventDefault();
   const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -1519,6 +1586,7 @@ async function postProjectUpdate(event, id) {
     values = Object.fromEntries(new FormData(form));
   values.requiresApproval = form.elements.requiresApproval.checked;
   values.visibleToClient = form.elements.visibleToClient.checked;
+  if (values.scheduledAt) values.scheduledAt = new Date(values.scheduledAt).toISOString();
   try {
     await live(`/projects/${id}/updates`, { method: "POST", body: JSON.stringify(values) });
     await openProject(id);

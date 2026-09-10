@@ -54,13 +54,36 @@ async function body(request) {
 function studio(user) {
   return user && user.role !== "client";
 }
+async function canManageTeam(env, user) {
+  if (!studio(user)) return false;
+  if (user.role === "admin") return true;
+  return Boolean(
+    await env.DB.prepare(
+      "select 1 from team_profiles where user_id=? and team_role='owner' and active=1",
+    )
+      .bind(user.id)
+      .first(),
+  );
+}
 async function canAccessProject(env, user, projectId) {
-  if (studio(user)) return true;
+  if (user?.role === "admin") return true;
+  if (!user) return false;
   return Boolean(
     await env.DB.prepare("select 1 from project_members where project_id=? and user_id=?")
       .bind(projectId, user.id)
       .first(),
   );
+}
+async function canProjectAction(env, user, projectId, capability = "can_edit") {
+  if (user?.role === "admin") return true;
+  if (!studio(user) || !["can_edit", "can_upload", "can_invoice"].includes(capability))
+    return false;
+  const row = await env.DB.prepare(
+    `select pm.role,coalesce(pp.${capability},0) allowed from project_members pm left join project_permissions pp on pp.project_id=pm.project_id and pp.user_id=pm.user_id where pm.project_id=? and pm.user_id=?`,
+  )
+    .bind(projectId, user.id)
+    .first();
+  return Boolean(row && (row.role === "owner" || row.allowed));
 }
 const FILE_TYPES = new Set([
   "image/jpeg",
@@ -607,7 +630,9 @@ export default {
 
     if (url.pathname === "/api/auth/login" && request.method === "POST") {
       const { email, password } = (await body(request)) || {};
-      const user = await env.DB.prepare("select * from users where email=?")
+      const user = await env.DB.prepare(
+        "select u.*,coalesce(tp.active,1) team_active from users u left join team_profiles tp on tp.user_id=u.id where u.email=?",
+      )
         .bind(
           String(email || "")
             .trim()
@@ -616,6 +641,7 @@ export default {
         .first();
       if (
         !user ||
+        !user.team_active ||
         typeof password !== "string" ||
         (await passwordHash(password, user.password_salt)) !== user.password_hash
       )
@@ -732,7 +758,7 @@ export default {
     }
     if (url.pathname === "/api/operations" && request.method === "GET") {
       const user = await userFromRequest(request, env);
-      if (!studio(user)) return deny("Studio access required", 403);
+      if (!(await canManageTeam(env, user))) return deny("Owner access required", 403);
       const [contacts, team, templates, leads, announcements] = await Promise.all([
         env.DB.prepare(
           "select * from client_contacts order by coalesce(renewal_at,'9999'),name",
@@ -753,6 +779,12 @@ export default {
         leadActivities: leads.results,
         announcements: announcements.results,
       });
+    }
+    if (url.pathname === "/api/update-templates" && request.method === "GET") {
+      const user = await userFromRequest(request, env);
+      if (!studio(user)) return deny("Studio access required", 403);
+      const rows = await env.DB.prepare("select id,name,title,body from update_templates order by name").all();
+      return json({ templates: rows.results });
     }
     if (url.pathname === "/api/contacts" && request.method === "POST") {
       const user = await userFromRequest(request, env);
@@ -785,6 +817,74 @@ export default {
         .run();
       await audit(env, user, null, "created", "client_contact", id, { name });
       return json({ id }, 201);
+    }
+    if (url.pathname === "/api/team" && request.method === "POST") {
+      const user = await userFromRequest(request, env);
+      if (!(await canManageTeam(env, user))) return deny("Owner access required", 403);
+      const p = await body(request),
+        email = String(p?.email || "").trim().toLowerCase().slice(0, 200),
+        displayName = String(p?.displayName || "").trim().slice(0, 160),
+        password = String(p?.temporaryPassword || ""),
+        teamRole = ["owner", "designer", "developer", "freelancer"].includes(p?.teamRole)
+          ? p.teamRole
+          : null;
+      if (!/^\S+@\S+\.\S+$/.test(email) || !displayName || password.length < 12 || !teamRole)
+        return deny("Name, email, role and a 12-character temporary password are required", 400);
+      const id = crypto.randomUUID(),
+        salt = random();
+      try {
+        await env.DB.batch([
+          env.DB.prepare(
+            "insert into users(id,email,display_name,role,password_salt,password_hash) values(?,?,?,?,?,?)",
+          ).bind(
+            id,
+            email,
+            displayName,
+            teamRole === "owner" ? "admin" : "studio_member",
+            salt,
+            await passwordHash(password, salt),
+          ),
+          env.DB.prepare(
+            "insert into team_profiles(user_id,team_role,active) values(?,?,1)",
+          ).bind(id, teamRole),
+        ]);
+      } catch (error) {
+        if (/unique/i.test(error.message)) return deny("That email is already in use", 409);
+        throw error;
+      }
+      await audit(env, user, null, "created", "team_member", id, { email, teamRole });
+      return json({ id }, 201);
+    }
+    const teamMatch = url.pathname.match(/^\/api\/team\/([^/]+)$/);
+    if (teamMatch && request.method === "PATCH") {
+      const user = await userFromRequest(request, env);
+      if (!(await canManageTeam(env, user))) return deny("Owner access required", 403);
+      const p = await body(request),
+        teamRole = ["owner", "designer", "developer", "freelancer"].includes(p?.teamRole)
+          ? p.teamRole
+          : null,
+        active = p?.active === false ? 0 : 1;
+      if (!teamRole) return deny("Choose a valid team role", 400);
+      if (teamMatch[1] === user.id && !active) return deny("You cannot deactivate yourself", 409);
+      const member = await env.DB.prepare("select id from users where id=? and role!='client'")
+        .bind(teamMatch[1])
+        .first();
+      if (!member) return deny("Team member not found", 404);
+      await env.DB.batch([
+        env.DB.prepare("update users set role=? where id=?").bind(
+          teamRole === "owner" ? "admin" : "studio_member",
+          teamMatch[1],
+        ),
+        env.DB.prepare(
+          "insert into team_profiles(user_id,team_role,active) values(?,?,?) on conflict(user_id) do update set team_role=excluded.team_role,active=excluded.active",
+        ).bind(teamMatch[1], teamRole, active),
+      ]);
+      if (!active) await env.DB.prepare("delete from sessions where user_id=?").bind(teamMatch[1]).run();
+      await audit(env, user, null, "updated", "team_member", teamMatch[1], {
+        teamRole,
+        active: Boolean(active),
+      });
+      return json({ ok: true });
     }
     const leadActivityMatch = url.pathname.match(/^\/api\/inquiries\/([^/]+)\/activities$/);
     if (leadActivityMatch && request.method === "POST") {
@@ -1080,6 +1180,8 @@ export default {
       const p = await body(request),
         projectId = invoicesMatch[1],
         source = p?.source === "tracked_time" ? "tracked_time" : "fixed";
+      if (!(await canProjectAction(env, user, projectId, "can_invoice")))
+        return deny("Invoice permission required", 403);
       let items = Array.isArray(p?.items) ? p.items.slice(0, 30) : [];
       if (source === "tracked_time") {
         const minutes =
@@ -1186,6 +1288,8 @@ export default {
           amount: Math.max(0, Math.round(Number(x.amount) || 0)),
           sortOrder: i,
         }));
+      if (!(await canProjectAction(env, user, proposalsMatch[1], "can_invoice")))
+        return deny("Invoice permission required", 403);
       if (!title || !blocks.length)
         return deny("Proposal title and service blocks are required", 400);
       if (p?.pdfFileId) {
@@ -1253,6 +1357,8 @@ export default {
         .bind(proposalPdfMatch[1])
         .first();
       if (!proposal) return deny("Proposal not found", 404);
+      if (!(await canProjectAction(env, user, proposal.project_id, "can_invoice")))
+        return deny("Invoice permission required", 403);
       const [blocks, branding] = await Promise.all([
         env.DB.prepare("select * from proposal_blocks where proposal_id=? order by sort_order")
           .bind(proposal.id)
@@ -1306,6 +1412,8 @@ export default {
         .bind(signRequestMatch[1])
         .first();
       if (!proposal?.storage_path) return deny("Attach a proposal PDF first", 400);
+      if (!(await canProjectAction(env, user, proposal.project_id, "can_invoice")))
+        return deny("Invoice permission required", 403);
       const client = await env.DB.prepare(
         "select u.email,u.display_name from project_members pm join users u on u.id=pm.user_id where pm.project_id=? and u.role='client' limit 1",
       )
@@ -1564,6 +1672,8 @@ export default {
     if (timeMatch && request.method === "POST") {
       const user = await userFromRequest(request, env);
       if (!studio(user)) return deny("Studio access required", 403);
+      if (!(await canProjectAction(env, user, timeMatch[1], "can_edit")))
+        return deny("Project edit permission required", 403);
       const p = await body(request);
       if (p?.action === "stop") {
         const row = await env.DB.prepare(
@@ -1599,6 +1709,8 @@ export default {
     if (guidelineMatch && request.method === "POST") {
       const user = await userFromRequest(request, env);
       if (!studio(user)) return deny("Studio access required", 403);
+      if (!(await canProjectAction(env, user, guidelineMatch[1], "can_edit")))
+        return deny("Project edit permission required", 403);
       const p = await body(request),
         title = String(p?.title || "")
           .trim()
@@ -1733,7 +1845,7 @@ export default {
     if (url.pathname === "/api/projects" && request.method === "GET") {
       const user = await userFromRequest(request, env);
       if (!user) return deny("Sign in required");
-      const query = studio(user)
+      const query = user.role === "admin"
         ? env.DB.prepare("select p.* from projects p order by p.updated_at desc")
         : env.DB.prepare(
             "select p.* from projects p join project_members pm on pm.project_id=p.id where pm.user_id=? order by p.updated_at desc",
@@ -1801,6 +1913,8 @@ export default {
     if (projectMatch && request.method === "PATCH") {
       const user = await userFromRequest(request, env);
       if (!studio(user)) return deny("Studio access required", 403);
+      if (!(await canProjectAction(env, user, projectMatch[1], "can_edit")))
+        return deny("Project edit permission required", 403);
       const input = projectInput(await body(request));
       if (!input.name || !input.service) return deny("Project name and service are required", 400);
       const result = await env.DB.prepare(
@@ -1825,6 +1939,8 @@ export default {
     if (clientAccessMatch && request.method === "POST") {
       const user = await userFromRequest(request, env);
       if (!studio(user)) return deny("Studio access required", 403);
+      if (!(await canProjectAction(env, user, clientAccessMatch[1], "can_edit")))
+        return deny("Project edit permission required", 403);
       const project = await env.DB.prepare("select id from projects where id=?")
         .bind(clientAccessMatch[1])
         .first();
@@ -1929,6 +2045,8 @@ export default {
         payload = await body(request),
         id = crypto.randomUUID();
       if (type !== "messages" && !studio(user)) return deny("Studio access required", 403);
+      if (type !== "messages" && !(await canProjectAction(env, user, projectId, "can_edit")))
+        return deny("Project edit permission required", 403);
       if (type === "messages") {
         const text = String(payload?.body || "")
           .trim()
@@ -2041,6 +2159,8 @@ export default {
         .bind(taskMatch[1])
         .first();
       if (!task) return deny("Task not found", 404);
+      if (!(await canProjectAction(env, user, task.project_id, "can_edit")))
+        return deny("Project edit permission required", 403);
       const p = await body(request),
         status = ["todo", "doing", "done"].includes(p?.status) ? p.status : "todo";
       await env.DB.prepare(
@@ -2065,6 +2185,8 @@ export default {
         .bind(deliverableItemMatch[1])
         .first();
       if (!item) return deny("Deliverable not found", 404);
+      if (!(await canProjectAction(env, user, item.project_id, "can_edit")))
+        return deny("Project edit permission required", 403);
       const p = await body(request),
         status = ["draft", "in_review", "approved"].includes(p?.status) ? p.status : "draft",
         title = String(p?.title || "")
@@ -2084,10 +2206,19 @@ export default {
     if (permissionMatch && request.method === "GET") {
       const user = await userFromRequest(request, env);
       if (!studio(user)) return deny("Studio access required", 403);
+      if (!(await canAccessProject(env, user, permissionMatch[1])))
+        return deny("Project access required", 403);
       const rows = await env.DB.prepare(
-        "select u.id,u.display_name,u.email,tp.team_role,pp.can_edit,pp.can_upload,pp.can_invoice from users u left join team_profiles tp on tp.user_id=u.id left join project_permissions pp on pp.user_id=u.id and pp.project_id=? where u.role!='client' order by u.display_name",
+        `select u.id,u.display_name,u.email,u.role,tp.team_role,pp.can_edit,pp.can_upload,pp.can_invoice
+         from users u
+         left join team_profiles tp on tp.user_id=u.id
+         left join project_permissions pp on pp.user_id=u.id and pp.project_id=?
+         where u.role!='client' and (?='admin' or exists (
+           select 1 from project_members pm where pm.project_id=? and pm.user_id=u.id
+         ))
+         order by u.display_name`,
       )
-        .bind(permissionMatch[1])
+        .bind(permissionMatch[1], user.role, permissionMatch[1])
         .all();
       return json({ members: rows.results });
     }
@@ -2095,6 +2226,16 @@ export default {
       const user = await userFromRequest(request, env);
       if (user?.role !== "admin") return deny("Admin access required", 403);
       const p = await body(request);
+      const member = await env.DB.prepare(
+        "select u.id from users u join team_profiles tp on tp.user_id=u.id where u.id=? and u.role!='client' and tp.active=1",
+      )
+        .bind(p?.userId || "")
+        .first();
+      if (!member) return deny("Active studio member not found", 404);
+      const project = await env.DB.prepare("select id from projects where id=?")
+        .bind(permissionMatch[1])
+        .first();
+      if (!project) return deny("Project not found", 404);
       await env.DB.batch([
         env.DB.prepare(
           "insert into project_members(project_id,user_id,role) values(?,?,?) on conflict(project_id,user_id) do update set role=excluded.role",
@@ -2178,6 +2319,8 @@ export default {
         .bind(resolveMatch[1])
         .first();
       if (!comment) return deny("Comment not found", 404);
+      if (!(await canProjectAction(env, user, comment.project_id, "can_edit")))
+        return deny("Project edit permission required", 403);
       await env.DB.prepare(
         "update design_comments set resolved_at=current_timestamp,resolved_by=? where id=?",
       )
@@ -2203,6 +2346,8 @@ export default {
     if (calendarMatch && request.method === "POST") {
       const user = await userFromRequest(request, env);
       if (!studio(user)) return deny("Studio access required", 403);
+      if (!(await canProjectAction(env, user, calendarMatch[1], "can_edit")))
+        return deny("Project edit permission required", 403);
       const payload = await body(request),
         title = String(payload?.title || "")
           .trim()
@@ -2241,6 +2386,8 @@ export default {
         .bind(contentPostMatch[1])
         .first();
       if (!post) return deny("Content post not found", 404);
+      if (!(await canProjectAction(env, user, post.project_id, "can_edit")))
+        return deny("Project edit permission required", 403);
       const payload = await body(request),
         status = ["draft", "in_review", "approved", "scheduled", "published"].includes(
           payload?.status,
@@ -2290,6 +2437,8 @@ export default {
     if (deliverableMatch && request.method === "POST") {
       const user = await userFromRequest(request, env);
       if (!studio(user)) return deny("Studio access required", 403);
+      if (!(await canProjectAction(env, user, deliverableMatch[1], "can_edit")))
+        return deny("Project edit permission required", 403);
       const payload = await body(request);
       const title = String(payload?.title || "")
         .trim()
@@ -2320,6 +2469,8 @@ export default {
       const user = await userFromRequest(request, env);
       if (!user || !(await canAccessProject(env, user, filesMatch[1])))
         return deny("Project access required", 403);
+      if (studio(user) && !(await canProjectAction(env, user, filesMatch[1], "can_upload")))
+        return deny("Project upload permission required", 403);
       if (!storageReady(env)) return deny("File storage is not configured", 503);
       const mimeType = String(request.headers.get("content-type") || "")
         .split(";")[0]
@@ -2418,6 +2569,8 @@ export default {
     if (assetsMatch && request.method === "POST") {
       const user = await userFromRequest(request, env);
       if (!studio(user)) return deny("Studio access required", 403);
+      if (!(await canProjectAction(env, user, assetsMatch[1], "can_upload")))
+        return deny("Project upload permission required", 403);
       const payload = await body(request),
         kind = payload?.kind;
       const name = String(payload?.name || "")
@@ -2552,6 +2705,8 @@ export default {
     if (updateMatch && request.method === "POST") {
       const user = await userFromRequest(request, env);
       if (!studio(user)) return deny("Studio access required", 403);
+      if (!(await canProjectAction(env, user, updateMatch[1], "can_edit")))
+        return deny("Project edit permission required", 403);
       const payload = await body(request);
       const title = String(payload?.title || "Studio update")
         .trim()
