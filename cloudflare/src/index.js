@@ -789,20 +789,23 @@ export default {
         .trim()
         .slice(0, 100)}%`;
       if (term === "%%") return json({ results: [] });
-      const projectScope = studio(user)
+      const globalProjectAccess = user.role === "admin";
+      const projectScope = globalProjectAccess
         ? ""
         : " and p.id in (select project_id from project_members where user_id=?)";
       const projectQuery = env.DB.prepare(
         `select p.id,p.name title,p.service subtitle,'project' type,p.id project_id from projects p where (p.name like ? or p.service like ?)${projectScope} limit 20`,
       );
       const projects = await (
-        studio(user) ? projectQuery.bind(term, term) : projectQuery.bind(term, term, user.id)
+        globalProjectAccess
+          ? projectQuery.bind(term, term)
+          : projectQuery.bind(term, term, user.id)
       ).all();
       const fileQuery = env.DB.prepare(
         `select pf.id,pf.file_name title,p.name subtitle,'file' type,pf.project_id from project_files pf join projects p on p.id=pf.project_id where pf.file_name like ?${projectScope} limit 20`,
       );
       const files = await (
-        studio(user) ? fileQuery.bind(term) : fileQuery.bind(term, user.id)
+        globalProjectAccess ? fileQuery.bind(term) : fileQuery.bind(term, user.id)
       ).all();
       let results = [...projects.results, ...files.results];
       if (studio(user)) {
@@ -821,11 +824,12 @@ export default {
       const projectId = url.searchParams.get("projectId");
       if (projectId && !(await canAccessProject(env, user, projectId)))
         return deny("Project access required", 403);
-      const sql = studio(user)
+      const globalAuditAccess = user.role === "admin";
+      const sql = globalAuditAccess
         ? `select ae.*,u.display_name actor_name from audit_events ae left join users u on u.id=ae.actor_id ${projectId ? "where ae.project_id=?" : ""} order by ae.created_at desc limit 100`
         : "select ae.*,u.display_name actor_name from audit_events ae left join users u on u.id=ae.actor_id where ae.project_id in (select project_id from project_members where user_id=?) order by ae.created_at desc limit 100";
       const rows = await (
-        studio(user)
+        globalAuditAccess
           ? projectId
             ? env.DB.prepare(sql).bind(projectId)
             : env.DB.prepare(sql)
