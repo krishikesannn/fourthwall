@@ -1,0 +1,53 @@
+name: Production database backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "35 20 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-database-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Confirm backup credentials are configured
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+      - name: Export production D1 database
+        run: >-
+          npx wrangler d1 export the-fourth-wall
+          --remote
+          --config cloudflare/wrangler.toml
+          --output production-backup.sql
+      - name: Validate and package export
+        run: node scripts/validate-d1-backup.mjs production-backup.sql backup
+      - name: Upload private recovery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fourth-wall-d1-${{ github.run_id }}
+          path: |
+            backup/production-backup.sql.gz
+            backup/production-backup.sql.sha256
+            backup/backup-metadata.json
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
