@@ -1,0 +1,38 @@
+name: Database migration integrity
+
+on:
+  pull_request:
+    paths:
+      - "cloudflare/migrations/**"
+      - "cloudflare/wrangler.toml"
+      - "scripts/verify-migrations.mjs"
+      - ".github/workflows/migration-integrity.yml"
+  push:
+    branches: [main]
+    paths:
+      - "cloudflare/migrations/**"
+      - "cloudflare/wrangler.toml"
+      - "scripts/verify-migrations.mjs"
+      - ".github/workflows/migration-integrity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migration-integrity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rebuild-clean-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Apply and verify every migration against a clean local D1 database
+        run: node scripts/verify-migrations.mjs
