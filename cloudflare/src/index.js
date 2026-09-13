@@ -1856,6 +1856,16 @@ export default {
       await audit(env, user, guidelineMatch[1], "created", "brand_guideline", id, { title });
       return json({ id }, 201);
     }
+    if (url.pathname === "/api/settings/profile" && request.method === "GET") {
+      const user = await userFromRequest(request, env);
+      if (!user) return deny("Sign in required");
+      const settings = await env.DB.prepare(
+        "select language,biometric_lock,theme,updated_at from user_settings where user_id=?",
+      ).bind(user.id).first();
+      return json({
+        settings: settings || { language: "en", biometric_lock: 0, theme: "light" },
+      });
+    }
     if (url.pathname === "/api/settings/profile" && request.method === "PATCH") {
       const user = await userFromRequest(request, env);
       if (!user) return deny("Sign in required");

@@ -313,7 +313,7 @@ async function nativeUnlock(force = false) {
 }
 async function openAppSettings() {
   const d = document.createElement("dialog");
-  d.innerHTML = `<form class="modal editor-form" id="appSettingsForm"><button class="close" type="button" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">APP SETTINGS</span><h2>Make the space yours.</h2><label>Language<select name="language"><option value="en">English</option><option value="hi">हिन्दी</option></select></label><label>Paper theme<select name="theme"><option value="light">Light parchment</option><option value="dark">Evergreen paper</option></select></label><label class="check-row"><input name="biometricLock" type="checkbox" ${localStorage.tfwBiometric === "1" ? "checked" : ""}> Biometric app lock on this device</label><button class="btn">SAVE SETTINGS</button></form>`;
+  d.innerHTML = `<form class="modal editor-form" id="appSettingsForm"><button class="close" type="button" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">APP SETTINGS</span><h2>Make the space yours.</h2><label>Language<select name="language"><option value="en" ${data.language !== "hi" ? "selected" : ""}>English</option><option value="hi" ${data.language === "hi" ? "selected" : ""}>हिन्दी</option></select></label><label>Paper theme<select name="theme"><option value="light" ${data.theme !== "dark" ? "selected" : ""}>Light parchment</option><option value="dark" ${data.theme === "dark" ? "selected" : ""}>Evergreen paper</option></select></label><label class="check-row"><input name="biometricLock" type="checkbox" ${localStorage.tfwBiometric === "1" ? "checked" : ""}> Biometric app lock on this device</label><button class="btn">SAVE SETTINGS</button></form>`;
   document.body.append(d);
   d.showModal();
   d.addEventListener("close", () => d.remove());
@@ -330,6 +330,7 @@ async function openAppSettings() {
     await live("/settings/profile", { method: "PATCH", body: JSON.stringify(values) });
     localStorage.tfwBiometric = values.biometricLock ? "1" : "0";
     data.theme = values.theme;
+    data.language = values.language;
     save();
     document.body.classList.toggle("dark", values.theme === "dark");
     d.close();
@@ -1716,6 +1717,15 @@ async function createProject(event) {
 }
 async function bootLive() {
   await syncOfflineQueue();
+  if (liveSession?.token) {
+    try {
+      const { settings } = await live("/settings/profile");
+      data.language = settings.language || "en";
+      data.theme = settings.theme === "dark" ? "dark" : "light";
+      document.body.classList.toggle("dark", data.theme === "dark");
+      save();
+    } catch (_) {}
+  }
   if (liveSession?.user?.role === "client" && localStorage.tfwProject) {
     try {
       client(await refreshClient(localStorage.tfwProject));
