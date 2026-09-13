@@ -183,8 +183,15 @@ function wrapPdf(value, width = 76) {
   if (line) lines.push(line);
   return lines;
 }
+function pdfRgb(value, fallback = "#B89246") {
+  const hex = /^#[0-9a-f]{6}$/i.test(String(value || "")) ? String(value) : fallback;
+  return [1, 3, 5]
+    .map((offset) => (Number.parseInt(hex.slice(offset, offset + 2), 16) / 255).toFixed(3))
+    .join(" ");
+}
 function proposalPdf(proposal, blocks, branding = {}) {
   const studioName = pdfText(branding.studio_name || "The Fourth Wall"),
+    accent = pdfRgb(branding.accent_color),
     lines = [
       { text: studioName.toUpperCase(), size: 11, font: "F1", gap: 28 },
       { text: pdfText(proposal.title), size: 27, font: "F2", gap: 40 },
@@ -217,9 +224,14 @@ function proposalPdf(proposal, blocks, branding = {}) {
     font: "F2",
     gap: 30,
   });
-  lines.push({ text: "Prepared with care. Valid for 30 days.", size: 9, font: "F1", gap: 15 });
+  lines.push({
+    text: pdfText(branding.email_footer || "Prepared with care. Valid for 30 days."),
+    size: 9,
+    font: "F1",
+    gap: 15,
+  });
   let y = 748,
-    stream = "0.055 0.22 0.196 rg 48 770 499 24 re f\n";
+    stream = `${accent} rg 48 770 499 24 re f\n`;
   for (const line of lines.slice(0, 42)) {
     stream += `BT /${line.font} ${line.size} Tf 0.055 0.22 0.196 rg 54 ${Math.max(54, y)} Td (${line.text}) Tj ET\n`;
     y -= line.gap;
