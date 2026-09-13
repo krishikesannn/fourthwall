@@ -588,10 +588,11 @@ async function reviewDeliverable(id, decision) {
   const note = decision === "changes_requested" ? prompt("What should the studio change?", "") : "";
   if (decision === "changes_requested" && !note) return;
   try {
-    await live(`/deliverables/${id}/approvals`, {
+    const result = await live(`/deliverables/${id}/approvals`, {
       method: "POST",
       body: JSON.stringify({ decision, typedSignature, note }),
     });
+    if (result.queued) return;
     client(await refreshClient(localStorage.tfwProject));
     toast(decision === "approved" ? "Approved with timestamp." : "Changes requested.");
   } catch (reason) {
@@ -599,6 +600,10 @@ async function reviewDeliverable(id, decision) {
   }
 }
 const readOfflineQueue = () => JSON.parse(localStorage.getItem("tfw-offline-queue") || "[]");
+const offlineQueueable = (path, method) =>
+  method === "POST"
+    ? /^\/(deliverables\/[^/]+\/approvals|projects\/[^/]+\/(reviews|messages)|content-posts\/[^/]+\/feedback|moodboards\/[^/]+\/reactions)$/.test(path)
+    : method === "PATCH" && /^\/(design-comments\/[^/]+\/resolve|content-posts\/[^/]+|inquiries\/[^/]+)$/.test(path);
 function addOfflineMutation(path, options) {
   const queue = readOfflineQueue();
   queue.push({
@@ -652,10 +657,7 @@ async function live(path, options = {}) {
   try {
     response = await fetch(`${LIVE_API}${path}`, { ...options, headers });
   } catch (error) {
-    const queueable =
-      /^(POST|PATCH)$/.test(options.method || "") &&
-      !path.startsWith("/auth/") &&
-      !path.endsWith("/files");
+    const queueable = offlineQueueable(path, options.method || "");
     if (!options.replay && (options.queueOnFail || queueable) && typeof options.body === "string")
       return addOfflineMutation(path, options);
     throw error;
@@ -809,11 +811,12 @@ status = async function (id, next) {
   lead.status = next;
   renderDesk();
   try {
-    await live(`/inquiries/${id}`, {
+    const result = await live(`/inquiries/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ status: next.toLowerCase() }),
     });
     save();
+    if (result.queued) return;
     toast("Lead status updated.");
   } catch (reason) {
     lead.status = previous;
@@ -999,7 +1002,11 @@ async function createCollaboration(event, projectId, type) {
   const values = Object.fromEntries(new FormData(form));
   if (form.elements.waitingOnClient) values.waitingOnClient = form.elements.waitingOnClient.checked;
   try {
-    await live(`/projects/${projectId}/${type}`, { method: "POST", body: JSON.stringify(values) });
+    const result = await live(`/projects/${projectId}/${type}`, { method: "POST", body: JSON.stringify(values) });
+    if (result.queued) {
+      form.reset();
+      return;
+    }
     liveSession.user.role === "client"
       ? client(await refreshClient(projectId))
       : await openProject(projectId);
@@ -1010,10 +1017,11 @@ async function createCollaboration(event, projectId, type) {
 }
 async function reactMoodboard(id, reaction, projectId) {
   try {
-    await live(`/moodboards/${id}/reactions`, {
+    const result = await live(`/moodboards/${id}/reactions`, {
       method: "POST",
       body: JSON.stringify({ reaction }),
     });
+    if (result.queued) return;
     liveSession.user.role === "client"
       ? client(await refreshClient(projectId))
       : await openProject(projectId);
@@ -1065,7 +1073,8 @@ async function addDesignComment(event, projectId) {
   event.preventDefault();
   const values = Object.fromEntries(new FormData(event.currentTarget));
   try {
-    await live(`/projects/${projectId}/reviews`, { method: "POST", body: JSON.stringify(values) });
+    const result = await live(`/projects/${projectId}/reviews`, { method: "POST", body: JSON.stringify(values) });
+    if (result.queued) return;
     liveSession.user.role === "client"
       ? client(await refreshClient(projectId))
       : await openProject(projectId);
@@ -1169,10 +1178,11 @@ async function replyDesignComment(parentId, fileId, pageNumber, projectId) {
   const body = prompt("Write your reply");
   if (!body?.trim()) return;
   try {
-    await live(`/projects/${projectId}/reviews`, {
+    const result = await live(`/projects/${projectId}/reviews`, {
       method: "POST",
       body: JSON.stringify({ parentId, fileId, pageNumber, body }),
     });
+    if (result.queued) return;
     liveSession.user.role === "client"
       ? client(await refreshClient(projectId))
       : await openProject(projectId);
@@ -1183,7 +1193,8 @@ async function replyDesignComment(parentId, fileId, pageNumber, projectId) {
 }
 async function resolveDesignComment(id, projectId) {
   try {
-    await live(`/design-comments/${id}/resolve`, { method: "PATCH", body: "{}" });
+    const result = await live(`/design-comments/${id}/resolve`, { method: "PATCH", body: "{}" });
+    if (result.queued) return;
     await openProject(projectId);
     toast("Comment resolved.");
   } catch (reason) {
@@ -1230,10 +1241,11 @@ async function changeContentMonth(direction) {
 }
 async function setContentStatus(id, status, projectId) {
   try {
-    await live(`/content-posts/${id}`, {
+    const result = await live(`/content-posts/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
     });
+    if (result.queued) return;
     await openProject(projectId);
     toast(status === "published" ? "Post marked published." : "Post scheduled.");
   } catch (reason) {
@@ -1244,10 +1256,11 @@ async function contentFeedback(id, decision, projectId) {
   const comment = decision === "changes_requested" ? prompt("What should change?", "") : "";
   if (decision === "changes_requested" && !comment) return;
   try {
-    await live(`/content-posts/${id}/feedback`, {
+    const result = await live(`/content-posts/${id}/feedback`, {
       method: "POST",
       body: JSON.stringify({ decision, comment }),
     });
+    if (result.queued) return;
     client(await refreshClient(projectId));
     toast(decision === "approved" ? "Post approved." : "Changes requested.");
   } catch (reason) {

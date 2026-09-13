@@ -12,9 +12,23 @@ function fixture(fetch) {
     toast() {}, fetch, ArrayBuffer, Blob,
   });
   vm.runInContext(source.slice(source.indexOf('const readOfflineQueue'), source.indexOf('window.addEventListener("online"')), context);
-  return { context, put: rows => storage.set('tfw-offline-queue', JSON.stringify(rows)), read: () => JSON.parse(storage.get('tfw-offline-queue')) };
+  return {
+    context,
+    queueable: (path, method) => vm.runInContext(`offlineQueueable(${JSON.stringify(path)}, ${JSON.stringify(method)})`, context),
+    put: rows => storage.set('tfw-offline-queue', JSON.stringify(rows)),
+    read: () => JSON.parse(storage.get('tfw-offline-queue')),
+  };
 }
 const action = { id: 'one', userId: 'a', path: '/comments', method: 'POST', body: '{}' };
+test('only low-risk collaboration actions are eligible for offline replay', () => {
+  const f = fixture(async () => ({ ok: true, json: async () => ({}) }));
+  assert.equal(f.queueable('/projects/p1/reviews', 'POST'), true);
+  assert.equal(f.queueable('/deliverables/d1/approvals', 'POST'), true);
+  assert.equal(f.queueable('/content-posts/c1', 'PATCH'), true);
+  assert.equal(f.queueable('/projects/p1/meetings', 'POST'), false);
+  assert.equal(f.queueable('/invoices/i1/payment-link', 'POST'), false);
+  assert.equal(f.queueable('/projects/p1/client-access', 'POST'), false);
+});
 test('failed reconnect preserves the original queued action without duplicating it', async () => {
   const f = fixture(async () => { throw Error('offline'); });
   f.put([action]);
