@@ -18,4 +18,3 @@ Run the workflow manually once from GitHub Actions and confirm its artifact cont
 6. Delete the temporary database after the drill.
 
 For a real incident, pause writes first and preserve the current damaged database with a separate export. Restore into a newly created D1 database, validate it, and only then change the production binding. This keeps rollback possible and avoids overwriting the last recoverable state.
-

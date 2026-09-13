@@ -50,4 +50,3 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
-

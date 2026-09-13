@@ -34,4 +34,3 @@ await Promise.all([
 ]);
 
 console.log(`Validated D1 backup: ${sql.byteLength} bytes, sha256 ${checksum}`);
-
