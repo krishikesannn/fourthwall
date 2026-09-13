@@ -1777,6 +1777,9 @@ export default {
         : [{ results: [] }, { results: [] }];
       return json({
         guidelines: guidelines.results,
+        testimonials: (await env.DB.prepare(
+          "select t.*,u.display_name from testimonials t join users u on u.id=t.user_id where t.project_id=? and (?=1 or t.user_id=?) order by t.created_at desc",
+        ).bind(insightsMatch[1], studio(user) ? 1 : 0, user.id).all()).results,
         timeEntries: times.results,
         weeklyTime: weeklyTime.results,
       });
@@ -1857,7 +1860,7 @@ export default {
     const testimonialMatch = url.pathname.match(/^\/api\/projects\/([^/]+)\/testimonial$/);
     if (testimonialMatch && request.method === "POST") {
       const user = await userFromRequest(request, env);
-      if (!user || !(await canAccessProject(env, user, testimonialMatch[1])))
+      if (!user || user.role !== "client" || !(await canAccessProject(env, user, testimonialMatch[1])))
         return deny("Project access required", 403);
       const eligible = await env.DB.prepare(
         "select 1 from projects where id=? and (status='complete' or exists(select 1 from milestones where project_id=projects.id and status='complete'))",
@@ -1866,11 +1869,20 @@ export default {
         .first();
       if (!eligible) return deny("Testimonials open after a milestone is completed", 409);
       const p = await body(request),
-        rating = Math.max(1, Math.min(5, Number(p?.rating) || 5)),
+        rating = Number(p?.rating),
         quote = String(p?.quote || "")
           .trim()
           .slice(0, 3000);
       if (!quote) return deny("Please share a short testimonial", 400);
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5)
+        return deny("Choose a rating from 1 to 5", 400);
+      const referralEmail = String(p?.referralEmail || "").trim();
+      if (referralEmail && (referralEmail.length > 200 || !/^\S+@\S+\.\S+$/.test(referralEmail)))
+        return deny("Enter a valid referral email", 400);
+      const previous = await env.DB.prepare(
+        "select id from testimonials where project_id=? and user_id=? order by created_at desc limit 1",
+      ).bind(testimonialMatch[1], user.id).first();
+      if (previous) return json({ id: previous.id, alreadySubmitted: true });
       const id = crypto.randomUUID();
       await env.DB.prepare(
         "insert into testimonials(id,project_id,user_id,rating,quote,referral_name,referral_email) values(?,?,?,?,?,?,?)",
@@ -1882,7 +1894,7 @@ export default {
           rating,
           quote,
           String(p?.referralName || "").slice(0, 160) || null,
-          String(p?.referralEmail || "").slice(0, 200) || null,
+          referralEmail || null,
         )
         .run();
       await audit(env, user, testimonialMatch[1], "submitted", "testimonial", id, { rating });

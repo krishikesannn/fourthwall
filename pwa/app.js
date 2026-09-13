@@ -210,7 +210,13 @@ function edit(id) {
   };
 }
 /* Live production API layer. Cached browser data remains available if offline. */
-const LIVE_API = "https://fourthwall.krishikesannn.workers.dev/api";
+const requestedApi = new URLSearchParams(location.search).get("api"),
+  LIVE_API =
+    ["localhost", "127.0.0.1"].includes(location.hostname) &&
+    requestedApi &&
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api\/?$/i.test(requestedApi)
+      ? requestedApi.replace(/\/$/, "")
+      : "https://fourthwall.krishikesannn.workers.dev/api";
 let liveSession = JSON.parse(localStorage.getItem("tfw-session") || "null"),
   clientProjectChoices = [];
 const stateTitle = (value) =>
@@ -255,6 +261,7 @@ const mapProject = (
   announcements: workspace.announcements || [],
   onboarding: workspace.onboarding || { items: [], intake: null },
   guidelines: workspace.guidelines || [],
+  testimonials: workspace.testimonials || [],
   timeEntries: workspace.timeEntries || [],
   invoices: workspace.invoices || [],
   proposals: workspace.proposals || [],
@@ -445,6 +452,7 @@ async function openAnalytics() {
 function openLeadPipeline() {
   const d = document.createElement("dialog"),
     stages = ["New", "Contacted", "Qualified", "Closed"];
+  d.className = "pipeline-dialog";
   d.innerHTML = `<section class="modal pipeline-modal"><button class="close" onclick="this.closest('dialog').close()">×</button><span class="eyebrow">LEAD PIPELINE</span><h2>Conversations in motion.</h2><div class="pipeline">${stages
     .map(
       (stage) =>
@@ -595,6 +603,7 @@ function addOfflineMutation(path, options) {
   const queue = readOfflineQueue();
   queue.push({
     id: crypto.randomUUID(),
+    userId: liveSession?.user?.id,
     path,
     method: options.method,
     body: options.body,
@@ -604,19 +613,30 @@ function addOfflineMutation(path, options) {
   toast("Saved offline — it will sync automatically.");
   return { queued: true };
 }
+let syncingOfflineQueue = false;
 async function syncOfflineQueue() {
-  if (!navigator.onLine || !liveSession?.token) return;
-  const queue = readOfflineQueue(),
-    remaining = [];
-  for (const item of queue) {
-    try {
-      await live(item.path, { method: item.method, body: item.body });
-    } catch (_) {
-      remaining.push(item);
+  if (syncingOfflineQueue || !navigator.onLine || !liveSession?.token) return;
+  const userId = liveSession.user?.id;
+  if (!userId) return;
+  syncingOfflineQueue = true;
+  try {
+    for (const item of readOfflineQueue()) {
+      // Unowned legacy entries cannot safely be attributed to the current account.
+      if (item.userId !== userId) continue;
+      if (liveSession?.user?.id !== userId) break;
+      try {
+        await live(item.path, { method: item.method, body: item.body, replay: true });
+      } catch (_) {
+        break; // Preserve order and keep this action for the next reconnect.
+      }
+      // Read again so actions added while the request was pending are preserved.
+      localStorage.setItem("tfw-offline-queue", JSON.stringify(
+        readOfflineQueue().filter((pending) => pending.id !== item.id),
+      ));
     }
+  } finally {
+    syncingOfflineQueue = false;
   }
-  localStorage.setItem("tfw-offline-queue", JSON.stringify(remaining));
-  if (queue.length && !remaining.length) toast("Offline changes synced.");
 }
 async function live(path, options = {}) {
   let headers = { ...(options.headers || {}) };
@@ -636,7 +656,7 @@ async function live(path, options = {}) {
       /^(POST|PATCH)$/.test(options.method || "") &&
       !path.startsWith("/auth/") &&
       !path.endsWith("/files");
-    if ((options.queueOnFail || queueable) && typeof options.body === "string")
+    if (!options.replay && (options.queueOnFail || queueable) && typeof options.body === "string")
       return addOfflineMutation(path, options);
     throw error;
   }
@@ -1289,8 +1309,17 @@ async function openNotificationSettings() {
     toast(reason.message);
   }
 }
+function testimonialView(project, studioView = false) {
+  const history = project.testimonials || [];
+  const eligible = project.status.toLowerCase() === "complete" ||
+    (project.milestones || []).some((item) => item.status === "complete");
+  if (history.length) return `<section class="section"><span class="eyebrow">CLIENT FEEDBACK</span><h2>${studioView ? "Words from your clients." : "Thank you for sharing."}</h2>${history.map((item) => `<article class="card update"><h3>${esc(item.display_name || "Client")} · ${esc(item.rating)}/5</h3><time>${formatDate(item.created_at)}</time><p>${esc(item.quote)}</p>${item.referral_name || item.referral_email ? `<p>Referral: ${esc(item.referral_name || "")} ${esc(item.referral_email || "")}</p>` : ""}</article>`).join("")}</section>`;
+  if (studioView) return '<section class="section"><h2>Client feedback</h2><p class="muted">Feedback will appear here after a client submits it.</p></section>';
+  if (!eligible) return "";
+  return `<form class="card editor-form" onsubmit="submitTestimonial(event,'${esc(project.id)}')"><span class="eyebrow">A MOMENT TO REFLECT</span><h3>Share your experience</h3><p class="muted">We have reached a milestone together. Your feedback goes privately to the studio.</p><label>Rating<select name="rating">${[5,4,3,2,1].map((value) => `<option>${value}</option>`).join("")}</select></label><label>Testimonial<textarea name="quote" required maxlength="3000"></textarea></label><label>Referral name (optional)<input name="referralName" maxlength="160"></label><label>Referral email (optional)<input name="referralEmail" type="email" maxlength="200"></label><p class="muted">Please share contact details only with their permission. Sending requires an internet connection.</p><button class="btn" type="submit">SEND FEEDBACK →</button></form>`;
+}
 function insightView(project, studioView = false) {
-  return `<section class="section brand-book"><span class="eyebrow">BRAND GUIDELINES</span><h2>Your living brand book.</h2>${project.guidelines.map((g) => `<article class="card guideline"><h3>${esc(g.title)}</h3><p>${esc(g.content)}</p></article>`).join("") || empty()}${studioView ? `<form class="card editor-form" onsubmit="createGuideline(event,'${esc(project.id)}')"><input name="title" required placeholder="Guideline chapter"><textarea name="content" required placeholder="Voice, colour, typography or usage guidance"></textarea><button class="btn">ADD CHAPTER</button></form><section class="card timer"><h3>Time tracking</h3><input id="timerDescription" placeholder="What are you working on?"><div class="actions"><button class="btn" onclick="timeAction('${esc(project.id)}','start')">START</button><button class="btn alt" onclick="timeAction('${esc(project.id)}','stop')">STOP</button></div><p>${project.timeEntries.reduce((n, x) => n + (x.minutes || 0), 0)} minutes recorded</p><div class="mini-list"><span class="eyebrow">WEEKLY TOTALS</span>${(project.weeklyTime || []).map((row) => `<p>${esc(row.week)} · <strong>${Math.round((row.minutes / 60) * 10) / 10} h</strong></p>`).join("") || `<p>No time recorded yet.</p>`}</div></section>` : `<button class="btn alt" onclick="downloadProjectArchive('${esc(project.id)}')">EXPORT PROJECT + FILES (.ZIP) ↓</button>${project.status === "Complete" ? `<form class="card editor-form" onsubmit="submitTestimonial(event,'${esc(project.id)}')"><h3>Share your experience</h3><label>Rating<select name="rating">${[5, 4, 3, 2, 1].map((x) => `<option>${x}</option>`).join("")}</select></label><label>Testimonial<textarea name="quote" required></textarea></label><input name="referralName" placeholder="Referral name (optional)"><input name="referralEmail" type="email" placeholder="Referral email (optional)"><button class="btn">SEND THANKS →</button></form>` : ""}`}</section>`;
+return `<section class="section brand-book"><span class="eyebrow">BRAND GUIDELINES</span><h2>Your living brand book.</h2>${project.guidelines.map((g) => `<article class="card guideline"><h3>${esc(g.title)}</h3><p>${esc(g.content)}</p></article>`).join("") || empty()}${studioView ? `<form class="card editor-form" onsubmit="createGuideline(event,'${esc(project.id)}')"><input name="title" required placeholder="Guideline chapter"><textarea name="content" required placeholder="Voice, colour, typography or usage guidance"></textarea><button class="btn">ADD CHAPTER</button></form><section class="card timer"><h3>Time tracking</h3><input id="timerDescription" placeholder="What are you working on?"><div class="actions"><button class="btn" onclick="timeAction('${esc(project.id)}','start')">START</button><button class="btn alt" onclick="timeAction('${esc(project.id)}','stop')">STOP</button></div><p>${project.timeEntries.reduce((n, x) => n + (x.minutes || 0), 0)} minutes recorded</p><div class="mini-list"><span class="eyebrow">WEEKLY TOTALS</span>${(project.weeklyTime || []).map((row) => `<p>${esc(row.week)} · <strong>${Math.round((row.minutes / 60) * 10) / 10} h</strong></p>`).join("") || `<p>No time recorded yet.</p>`}</div></section>` : `<button class="btn alt" onclick="downloadProjectArchive('${esc(project.id)}')">EXPORT PROJECT + FILES (.ZIP) ↓</button>`}${testimonialView(project, studioView)}</section>`;
 }
 const renderClientWithOperations = client;
 client = function (project) {
@@ -1377,16 +1406,20 @@ async function timeAction(projectId, action) {
 }
 async function submitTestimonial(event, projectId) {
   event.preventDefault();
-  const values = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form));
+  const button = form.querySelector("button[type=submit]");
+  if (button) button.disabled = true;
   try {
     await live(`/projects/${projectId}/testimonial`, {
       method: "POST",
       body: JSON.stringify(values),
     });
-    event.currentTarget.remove();
+    form.innerHTML = '<h3>Thank you for sharing.</h3><p>Your feedback has been received by the studio.</p>';
     toast("Thank you — received.");
   } catch (reason) {
     toast(reason.message);
+    if (button) button.disabled = false;
   }
 }
 const money = (amount, currency = "INR") =>
@@ -1665,6 +1698,7 @@ async function createProject(event) {
   }
 }
 async function bootLive() {
+  await syncOfflineQueue();
   if (liveSession?.user?.role === "client" && localStorage.tfwProject) {
     try {
       client(await refreshClient(localStorage.tfwProject));
