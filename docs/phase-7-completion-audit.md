@@ -37,7 +37,7 @@ Shared evidence:
 
 | Requirement | Status | Direct evidence | Remaining gate |
 | --- | --- | --- | --- |
-| Draggable lead pipeline, notes, reminders, source | Implemented | `0002_inquiries.sql`, `0010_operations.sql`, `phase7-team-workflows.test.js`, `03-lead-pipeline-desktop.png` | Pointer/keyboard drag has not been directly browser-tested |
+| Draggable lead pipeline, notes, reminders, source | Implemented | `0002_inquiries.sql`, `0010_operations.sql`, `phase7-team-workflows.test.js`, `03-lead-pipeline-desktop.png`; each card also has a 44px keyboard/touch stage selector | Final browser interaction recapture remains |
 | Project tasks, assignees, deadlines, waiting flag | Verified | `0008_collaboration.sql`, `phase7-delivery-management.test.js`, `05-studio-project-delivery-desktop.png` | — |
 | Rich/scheduled updates and attachments | Verified | `0012_delivery_management.sql`, `phase7-delivery-management.test.js`, `05-studio-project-delivery-desktop.png` | — |
 | Versioned deliverables, status, approver, timestamp | Verified | `0005_files_and_approvals.sql`, `0012_delivery_management.sql`, `phase7-delivery-management.test.js` | — |

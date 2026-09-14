@@ -34,6 +34,8 @@ input[type="file"] { width: 100%; }
 .pipeline { display: grid; grid-template-columns: repeat(4,minmax(190px,1fr)); gap: 10px; overflow-x: auto; padding-bottom: 8px; }
 .pipeline-stage { min-height: 260px; padding: 10px; border: 1px dashed var(--line); border-radius: 12px; }
 .pipeline-stage > .card { margin-bottom: 9px; }
+.pipeline-lead label { display: grid; gap: 5px; margin: 12px 0 4px; }
+.pipeline-lead select { width: 100%; min-height: 44px; }
 .pipeline-modal { width: min(1100px,94vw); }
 @media (max-width: 390px) { .form-split { grid-template-columns: 1fr; } }
 .review-reply{margin-left:clamp(1rem,5vw,3rem);border-left:3px solid var(--gold)}

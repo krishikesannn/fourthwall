@@ -461,7 +461,7 @@ function openLeadPipeline() {
           .filter((l) => l.status === stage)
           .map(
             (l) =>
-              `<article class="card" draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${esc(l.id)}')"><b>${esc(l.name)}</b><p>${esc(l.company)}</p><button class="signout" onclick="addLeadNote('${esc(l.id)}')">Note / follow-up</button></article>`,
+              `<article class="card pipeline-lead" draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${esc(l.id)}')"><b>${esc(l.name)}</b><p>${esc(l.company)}</p><label>Move to stage<select aria-label="Move ${esc(l.name)} to stage" onchange="movePipelineLead('${esc(l.id)}',this.value,this)">${stages.map((value) => `<option value="${value}" ${value === l.status ? "selected" : ""}>${value}</option>`).join("")}</select></label><button class="signout" onclick="addLeadNote('${esc(l.id)}')">Note / follow-up</button></article>`,
           )
           .join("")}</section>`,
     )
@@ -474,6 +474,12 @@ async function dropLead(event, next) {
   const id = event.dataTransfer.getData("text/plain");
   await status(id, next);
   event.currentTarget.closest("dialog").close();
+  openLeadPipeline();
+}
+async function movePipelineLead(id, next, control) {
+  control.disabled = true;
+  await status(id, next);
+  control.closest("dialog").close();
   openLeadPipeline();
 }
 async function addLeadNote(id) {
