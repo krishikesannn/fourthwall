@@ -673,8 +673,13 @@ async function createSession(env, userId) {
   return token;
 }
 
-export default {
-  async fetch(request, env) {
+function offlineMutationAllowed(path, method) {
+  return method === "POST"
+    ? /^\/(deliverables\/[^/]+\/approvals|projects\/[^/]+\/(reviews|messages)|content-posts\/[^/]+\/feedback|moodboards\/[^/]+\/reactions)$/.test(path)
+    : method === "PATCH" && /^\/(design-comments\/[^/]+\/resolve|content-posts\/[^/]+|inquiries\/[^/]+)$/.test(path);
+}
+
+async function handleRequest(request, env) {
     const url = new URL(request.url);
     if (request.method === "OPTIONS")
       return new Response(null, {
@@ -685,6 +690,59 @@ export default {
         },
       });
     if (url.pathname === "/api/health") return json({ ok: true, service: "the-fourth-wall-api" });
+
+    if (url.pathname === "/api/offline-sync" && request.method === "POST") {
+      const user = await userFromRequest(request, env);
+      if (!user) return deny("Sign in required");
+      const payload = await body(request),
+        id = String(payload?.id || ""),
+        path = String(payload?.path || ""),
+        method = String(payload?.method || "").toUpperCase(),
+        requestBody = String(payload?.body || "");
+      if (!/^[a-zA-Z0-9-]{8,80}$/.test(id)) return deny("Invalid mutation ID", 400);
+      if (!offlineMutationAllowed(path, method)) return deny("This action cannot be replayed offline", 400);
+      if (requestBody.length > 20000) return deny("Offline action is too large", 413);
+      const existing = await env.DB.prepare(
+        "select state,response_status,response_body from offline_mutation_receipts where user_id=? and id=?",
+      ).bind(user.id, id).first();
+      if (existing?.state === "complete")
+        return new Response(existing.response_body || "{}", {
+          status: existing.response_status || 200,
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "access-control-allow-origin": "*",
+            "x-idempotent-replay": "true",
+          },
+        });
+      if (existing) return deny("Action is already syncing", 409);
+      const claimed = await env.DB.prepare(
+        "insert or ignore into offline_mutation_receipts(id,user_id,method,path) values(?,?,?,?)",
+      ).bind(id, user.id, method, path).run();
+      if (!claimed.meta?.changes) return deny("Action is already syncing", 409);
+      try {
+        const inner = new Request(`${url.origin}/api${path}`, {
+            method,
+            headers: {
+              authorization: request.headers.get("authorization") || "",
+              "content-type": "application/json",
+            },
+            body: requestBody,
+          }),
+          response = await handleRequest(inner, env),
+          responseBody = await response.text();
+        await env.DB.prepare(
+          "update offline_mutation_receipts set state='complete',response_status=?,response_body=?,completed_at=current_timestamp where user_id=? and id=?",
+        ).bind(response.status, responseBody, user.id, id).run();
+        return new Response(responseBody, {
+          status: response.status,
+          headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*" },
+        });
+      } catch (error) {
+        await env.DB.prepare("delete from offline_mutation_receipts where user_id=? and id=?")
+          .bind(user.id, id).run();
+        return deny(error.message || "Offline action could not sync", 503);
+      }
+    }
 
     if (url.pathname === "/api/auth/bootstrap" && request.method === "POST") {
       if (
@@ -2891,7 +2949,10 @@ export default {
       return json({ update: { id, title, body: text } }, 201);
     }
     return deny("Not found", 404);
-  },
+}
+
+export default {
+  fetch: handleRequest,
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
       Promise.all([

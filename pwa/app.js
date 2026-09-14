@@ -631,7 +631,11 @@ async function syncOfflineQueue() {
       if (item.userId !== userId) continue;
       if (liveSession?.user?.id !== userId) break;
       try {
-        await live(item.path, { method: item.method, body: item.body, replay: true });
+        await live("/offline-sync", {
+          method: "POST",
+          body: JSON.stringify(item),
+          replay: true,
+        });
       } catch (_) {
         break; // Preserve order and keep this action for the next reconnect.
       }

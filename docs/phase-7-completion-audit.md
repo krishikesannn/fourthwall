@@ -59,7 +59,7 @@ Shared evidence:
 | Full audit trail | Verified | `0007_system_foundations.sql`, `phase7-foundations.test.js`, `phase7-member-isolation.test.js` | — |
 | Roles, permissions, project access | Verified | migrations `0001`, `0003`, `0004`, `0010`; `phase7-team-workflows.test.js`, `phase7-member-isolation.test.js` | — |
 | Multi-project client switcher | Verified | `phase7-delivery-management.test.js`, `08-client-space-mobile.png` | — |
-| Offline queue and reconnect synchronization | Implemented | `offline-replay.test.js`, `pwa-shell-cache.test.js` | Server idempotency and real browser reconnect run remain |
+| Offline queue and reconnect synchronization | Verified | `0017_offline_mutation_receipts.sql`, `offline-replay.test.js`, `offline-idempotency.test.js`, `pwa-shell-cache.test.js`; authenticated local first/retry replay returned the stored response | — |
 | Project messaging, inline files, read receipts | Verified | `0008_collaboration.sql`, `phase7-collaboration.test.js`, `09-client-collaboration-mobile.png` | — |
 | Client project/file and studio CRM export | Verified | `phase7-portable-archive.test.js`, `phase7-insights.test.js` | — |
 | White-label PDFs and email text | Implemented | `0016_operational_reminders.sql`, `phase7-branding-reminders.test.js`, `proposal-branding-output.test.js`, `04b-studio-branding-desktop.png` | Provider-delivered email evidence and logo rendering remain |
