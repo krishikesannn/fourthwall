@@ -47,5 +47,8 @@
   </div>
   <dialog id="projectDialog"><form id="projectForm" class="project-form" method="dialog"><button class="dialog-close" value="cancel" aria-label="Close">×</button><span class="eyebrow">NEW PROJECT</span><h2>Start a fresh chapter.</h2><label>Project / client name<input name="name" required placeholder="e.g. Saffron House"></label><label>What are you delivering?<input name="service" required placeholder="e.g. Brand identity"></label><div class="two-col"><label>Status<select name="status"><option>Planning</option><option>Active</option><option>Complete</option></select></label><label>Due date<input name="dueDate" type="date"></label></div><label>Client access email<input name="clientEmail" type="email" placeholder="client@brand.com"></label><label>Client project code<input name="clientCode" placeholder="e.g. SAFFRON2026"></label><label>Progress <output id="progressValue">0%</output><input id="progressInput" name="progress" type="range" min="0" max="100" value="0"></label><p class="form-error" id="projectError" aria-live="polite"></p><button class="button" type="submit">CREATE PROJECT →</button></form></dialog>
   <script src="scripts/admin.js"></script>
+  <!-- Cloudflare Web Analytics -->
+  <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token":"e3c0a33473d14bf994b1f0b193f56733"}'></script>
+  <!-- End Cloudflare Web Analytics -->
 </body>
 </html>
