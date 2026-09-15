@@ -1,6 +1,6 @@
 # Phase 7 completion audit
 
-Last reviewed: 2026-09-13. This document is a release gate, not a feature list. A row is complete only when its implementation, authorization, persistence, user interface, and relevant runtime behavior have direct evidence.
+Last reviewed: 2026-09-15. This document is a release gate, not a feature list. A row is complete only when its implementation, authorization, persistence, user interface, and relevant runtime behavior have direct evidence.
 
 Status meanings:
 
@@ -76,7 +76,7 @@ Shared evidence:
 | Complete role-by-route authorization matrix | Feature tests cover named routes but do not execute every route as client/member/admin | Implemented; exhaustive runtime matrix pending |
 | Visual coverage | 16 seeded phone/desktop captures | Implemented; recapture after final release and compare |
 | Production backup/recovery | Scheduled private export, checksum validator, recovery runbook | Implemented; first successful artifact and restore drill pending |
-| Android package | Capacitor project and biometric configuration exist | Implemented; rebuild/sign/install/final device run pending |
+| Android package | Capacitor 8 debug APK rebuilt successfully with JDK 21 on 2026-09-15; package `com.thefourthwall.studio`, version `1.0` (1), min SDK 24, target SDK 36; embedded `app.js` SHA-256 matched the current PWA; APK SHA-256 `FF5C6915FCE657A164012EDE3732D7355BC6FB70F0EEBD7362F69B62BEC65ADD` | Build verified; release signing, physical install, and biometric device run pending |
 | External providers | Production deployment exposes no Razorpay, Dropbox Sign, Google service-account, or Resend bindings | Blocked externally |
 
 Phase 7 must remain open until every **Implemented** and **Blocked externally** gate above is either directly verified or explicitly removed from scope by the product owner.
