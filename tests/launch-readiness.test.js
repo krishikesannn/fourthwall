@@ -59,3 +59,11 @@ test('the sitemap only publishes real canonical pages', () => {
   assert.ok(urls.length >= marketingPages.length);
   for (const url of urls) assert.ok(fs.existsSync(path.join(root, url || 'index.html')), url);
 });
+
+test('case-study hero preserves the transparent collage on mobile browsers', () => {
+  const html = read('projects.html');
+  assert.match(html, /<picture>\s*<source[^>]+assets\/images\/harsha-hero\.png[^>]+type="image\/png"/is);
+  assert.match(html, /<img[^>]+assets\/images\/harsha-hero\.png[^>]+class="harsha-hero__main-img"/is);
+  const refinements = read('styles/refinements.css');
+  assert.match(refinements, /\.harsha-hero__visual\s*\{[\s\S]*?background:\s*var\(--bg-primary,\s*#E5D4C2\)/);
+});

@@ -713,6 +713,13 @@ body {
 /* Hero Showcase Right */
 .harsha-hero__visual {
   position: relative;
+  /* Keep transparent collage pixels on the editorial parchment instead of a
+     browser-default black canvas when the image is decoded on mobile. */
+  background: var(--bg-primary, #E5D4C2);
+}
+
+.harsha-hero__visual picture {
+  display: block;
 }
 
 .harsha-hero__main-img {
