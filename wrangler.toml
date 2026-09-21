@@ -11,9 +11,11 @@ workers_dev = true
 SUPABASE_URL = "https://ltcbqxkyvjumjqzephbh.supabase.co"
 SUPABASE_STORAGE_BUCKET = "project-files"
 PUBLIC_APP_URL = "https://fourthwall.pages.dev/pwa/"
-INQUIRY_NOTIFICATION_TO = "thefourthwall04.co@gmail.com"
-# Resend's shared test sender only delivers to the email address that owns the Resend account.
-# Once a domain is verified in Resend, change this to an address on that domain.
+# Resend's shared test sender only delivers to the email address that owns the Resend account,
+# which is krishikesannn@gmail.com. To send to thefourthwall04.co@gmail.com instead, either
+# recreate the Resend account with that address or verify a domain in Resend and change the
+# sender below to an address on that domain.
+INQUIRY_NOTIFICATION_TO = "krishikesannn@gmail.com"
 INQUIRY_FROM_EMAIL = "The Fourth Wall <onboarding@resend.dev>"
 DROPBOX_SIGN_TEST_MODE = "true"
 STUDIO_TIME_ZONE = "Asia/Kolkata"
