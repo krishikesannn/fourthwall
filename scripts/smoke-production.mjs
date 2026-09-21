@@ -43,18 +43,26 @@ async function checkPage(pathname, assertions) {
 await checkPage("/", [
   [/<title>The Fourth Wall/i, "the public homepage title"],
   [/hero-cover-seamless\.png/i, "the transparent parchment hero"],
-  [/href="pwa\//i, "the client/studio login link"],
+  [/href="contact\.html"/i, "the inquiry link"],
 ]);
-await checkPage("/pwa/", [
-  [/<link rel="manifest" href="manifest\.json"/i, "the PWA manifest"],
-  [/id="app"/i, "the PWA app mount"],
-]);
+const homeHtml = await (await request(`${site}/`)).text();
+check(
+  !/href="(pwa\/|portal\.html|admin\.html)/i.test(homeHtml),
+  "the homepage still links to a login page",
+);
 
-const manifestResponse = await request(`${site}/pwa/manifest.json`);
-check(manifestResponse.ok, `PWA manifest returned ${manifestResponse.status}`);
-const manifest = await manifestResponse.json();
-check(manifest.name === "The Fourth Wall", "PWA manifest has the wrong app name");
-check(manifest.display === "standalone", "PWA manifest is not installable in standalone mode");
+// Login is switched off: every entry point must send visitors back to the homepage.
+for (const pathname of ["/pwa/", "/portal.html", "/admin.html"]) {
+  const response = await request(`${site}${pathname}`, { redirect: "manual" });
+  check(
+    [301, 302, 307, 308].includes(response.status),
+    `${pathname} should redirect to the homepage, received ${response.status}`,
+  );
+  check(
+    /^(https?:\/\/[^/]+)?\/$/.test(response.headers.get("location") || ""),
+    `${pathname} should redirect to the homepage`,
+  );
+}
 
 const workerHealth = await request(`${api}/api/health`);
 check(workerHealth.ok, `Worker health returned ${workerHealth.status}`);
@@ -83,4 +91,36 @@ check(
   "Worker preflight is missing required API methods",
 );
 
-console.log("Production smoke check passed: homepage, PWA, Worker health, and auth boundaries.");
+// The contact form posts cross-origin to the Worker, so the browser preflight must allow POST + JSON.
+const inquiryCors = await request(`${api}/api/inquiries`, {
+  method: "OPTIONS",
+  headers: {
+    origin: site,
+    "access-control-request-method": "POST",
+    "access-control-request-headers": "content-type",
+  },
+});
+check([200, 204].includes(inquiryCors.status), `Inquiry preflight returned ${inquiryCors.status}`);
+check(
+  inquiryCors.headers.get("access-control-allow-methods")?.includes("POST"),
+  "Inquiry preflight does not allow POST",
+);
+check(
+  inquiryCors.headers.get("access-control-allow-headers")?.toLowerCase().includes("content-type"),
+  "Inquiry preflight does not allow the JSON content-type header",
+);
+
+// An empty inquiry is rejected by validation before anything is stored or emailed.
+const emptyInquiry = await request(`${api}/api/inquiries`, {
+  method: "POST",
+  headers: { "content-type": "application/json", origin: site },
+  body: "{}",
+});
+check(
+  emptyInquiry.status === 400,
+  `An empty inquiry should be rejected with 400, received ${emptyInquiry.status}`,
+);
+
+console.log(
+  "Production smoke check passed: homepage, login redirects, Worker health, inquiry endpoint, and auth boundaries.",
+);

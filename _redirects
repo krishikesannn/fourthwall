@@ -1,0 +1,12 @@
+# Login is switched off for now. The client and studio entry points send
+# visitors to the homepage. The files stay in the repo, so restoring login means
+# deleting these lines and re-adding the homepage links (see docs/CLAUDE-HANDOFF.md).
+# Temporary (302) on purpose. Both pretty and .html forms are listed because
+# Cloudflare Pages serves /portal for portal.html.
+/pwa / 302
+/pwa/ / 302
+/pwa/index.html / 302
+/portal / 302
+/portal.html / 302
+/admin / 302
+/admin.html / 302

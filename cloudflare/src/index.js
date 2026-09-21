@@ -506,9 +506,13 @@ function escapeEmailHtml(value) {
 }
 
 // Notification delivery is intentionally best-effort: a temporary email-provider
-// problem must never prevent a genuine lead from being saved in D1.
+// problem must never prevent a genuine lead from being saved in D1. It returns
+// whether the email was accepted so the caller can tell the visitor the truth.
 async function notifyStudioOfInquiry(env, inquiry) {
-  if (!env.RESEND_API_KEY || !env.INQUIRY_NOTIFICATION_TO || !env.INQUIRY_FROM_EMAIL) return;
+  if (!env.RESEND_API_KEY || !env.INQUIRY_NOTIFICATION_TO || !env.INQUIRY_FROM_EMAIL) {
+    console.error("Inquiry email not sent: RESEND_API_KEY, INQUIRY_NOTIFICATION_TO or INQUIRY_FROM_EMAIL is unset");
+    return false;
+  }
   const lines = [
     ["Name", inquiry.name],
     ["Email", inquiry.email],
@@ -542,11 +546,13 @@ async function notifyStudioOfInquiry(env, inquiry) {
     });
     if (!response.ok)
       console.error("Inquiry email notification failed", response.status, await response.text());
+    return response.ok;
   } catch (error) {
     console.error(
       "Inquiry email notification failed",
       error instanceof Error ? error.message : String(error),
     );
+    return false;
   }
 }
 async function sendWeeklyDigests(env) {
@@ -2023,8 +2029,8 @@ async function handleRequest(request, env) {
           inquiry.details,
         )
         .run();
-      await notifyStudioOfInquiry(env, inquiry);
-      return json({ ok: true, message: "Inquiry received." }, 201);
+      const emailed = await notifyStudioOfInquiry(env, inquiry);
+      return json({ ok: true, message: "Inquiry received.", emailed }, 201);
     }
     if (url.pathname === "/api/inquiries" && request.method === "GET") {
       const user = await userFromRequest(request, env);

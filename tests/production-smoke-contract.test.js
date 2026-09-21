@@ -5,9 +5,12 @@ const fs = require("node:fs");
 const smoke = fs.readFileSync("scripts/smoke-production.mjs", "utf8");
 const workflow = fs.readFileSync(".github/workflows/production-smoke.yml", "utf8");
 
-test("production smoke check covers public, PWA, health, and authorization boundaries", () => {
+test("production smoke check covers public, login redirects, inquiry endpoint, health, and authorization boundaries", () => {
   assert.match(smoke, /hero-cover-seamless\\\.png/);
-  assert.match(smoke, /\/pwa\/manifest\.json/);
+  assert.match(smoke, /"\/pwa\/", "\/portal\.html", "\/admin\.html"/);
+  assert.match(smoke, /redirect: "manual"/);
+  assert.match(smoke, /\/api\/inquiries/);
+  assert.match(smoke, /empty inquiry should be rejected with 400/i);
   assert.match(smoke, /\/api\/health/);
   assert.match(smoke, /\/api\/projects/);
   assert.match(smoke, /\/api\/search\?q=private/);

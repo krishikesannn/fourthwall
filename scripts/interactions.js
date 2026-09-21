@@ -114,19 +114,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
       try {
         const formData = new FormData(contactForm);
-        const response = await fetch('/api/inquiries', {
+        // The Pages site has no /api route; the Worker lives on its own host. Local dev serves /api itself.
+        const inquiryUrl = ['localhost', '127.0.0.1'].includes(location.hostname)
+          ? '/api/inquiries'
+          : 'https://fourthwall.krishikesannn.workers.dev/api/inquiries';
+        const response = await fetch(inquiryUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(Object.fromEntries(formData))
         });
-        const result = await response.json();
+        const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || 'We could not send your inquiry.');
 
+        // The Worker saves every inquiry, but its email alert can fail. Say so instead of promising a reply we may not see.
+        const alertNote = result.emailed === false
+          ? '<p style="font-family: var(--font-sans); font-size: 0.95rem; line-height: 1.7; color: var(--color-text-light); margin-top: 0.8rem;">To be safe, please also write to <a href="mailto:thefourthwall04.co@gmail.com">thefourthwall04.co@gmail.com</a>.</p>'
+          : '';
         contactForm.innerHTML = `
         <div style="padding: 2rem 0; color: var(--color-primary);">
           <span style="font-family: var(--font-sans); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.14em; color: var(--color-accent); text-transform: uppercase; display: block; margin-bottom: 0.5rem;">INQUIRY RECEIVED ✦</span>
           <h3 style="font-family: var(--font-serif); font-size: 1.8rem; font-weight: 700; color: var(--color-primary); margin-bottom: 0.8rem;">Thank you, ${name}.</h3>
           <p style="font-family: var(--font-sans); font-size: 1rem; line-height: 1.7; color: var(--color-text-light);">We've received your project details and will respond directly to <strong>${email}</strong> within 24 hours.</p>
+          ${alertNote}
         </div>
       `;
       } catch (error) {
