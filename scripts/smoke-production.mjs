@@ -47,7 +47,8 @@ await checkPage("/", [
 ]);
 const homeHtml = await (await request(`${site}/`)).text();
 check(
-  !/href="(pwa\/|portal\.html|admin\.html)/i.test(homeHtml),
+  // Exact login destinations only: every page legitimately uses pwa/icon.svg as its favicon.
+  !/href="(pwa\/?|pwa\/index\.html|portal(\.html)?|admin(\.html)?)"/i.test(homeHtml),
   "the homepage still links to a login page",
 );
 
