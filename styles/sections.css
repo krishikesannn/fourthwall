@@ -1196,19 +1196,14 @@
   z-index: 3;
 }
 
-/* Top Right (Small Square) */
+/* Top Right: sized to the collage's own shape (900x626) so the whole artwork fits without cropping. */
 .work-scatter__item--tr {
-  left: 73%;
+  left: 71%;
   top: 0px;
-  width: 155px;
-  height: 155px;
+  width: 210px;
+  height: 146px;
   border-radius: 20px;
   background: #eee3d6;
-}
-
-/* harsha-hero-tile.jpg is a square crop of the collage centred on the shopping bag. */
-.work-scatter__item--tr img {
-  object-position: center;
 }
 
 /* Far Right Middle */
@@ -1263,6 +1258,11 @@
   .work-scatter__item--bl {
     aspect-ratio: 1;
   }
+
+  /* Square grid cell: show the whole wide collage on parchment rather than cropping its sides. */
+  .work-scatter__item--tr img {
+    object-fit: contain;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1275,6 +1275,15 @@
   .work-scatter__item--center {
     grid-column: auto;
     aspect-ratio: 4 / 3;
+  }
+
+  /* Full-width on phones: match the collage's shape so it fills the card exactly. */
+  .work-scatter__item--tr {
+    aspect-ratio: 900 / 626;
+  }
+
+  .work-scatter__item--tr img {
+    object-fit: cover;
   }
 }
 
