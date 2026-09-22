@@ -1206,11 +1206,9 @@
   background: #eee3d6;
 }
 
-/* The collage is wide (roughly 3:2); show all of it centred on parchment instead of cropping it. */
+/* harsha-hero-tile.jpg is a square crop of the collage centred on the shopping bag. */
 .work-scatter__item--tr img {
-  object-fit: contain;
   object-position: center;
-  padding: 6px;
 }
 
 /* Far Right Middle */
