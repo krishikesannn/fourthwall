@@ -64,6 +64,15 @@ test('case-study hero preserves the transparent collage on mobile browsers', () 
   const html = read('projects.html');
   assert.match(html, /<picture>\s*<source[^>]+assets\/images\/harsha-hero\.png[^>]+type="image\/png"/is);
   assert.match(html, /<img[^>]+assets\/images\/harsha-hero\.png[^>]+class="harsha-hero__main-img"/is);
+  // No flat fill behind the collage: a solid colour shows as a box on the textured paper.
   const refinements = read('styles/refinements.css');
-  assert.match(refinements, /\.harsha-hero__visual\s*\{[\s\S]*?background:\s*var\(--bg-primary,\s*#E5D4C2\)/);
+  assert.match(refinements, /\.harsha-hero__visual\s*\{[^}]*background:\s*transparent/);
+});
+
+test('homepage collage tile uses a transparent image with no card behind it', () => {
+  const html = read('index.html');
+  assert.match(html, /work-scatter__item--tr[\s\S]*?assets\/images\/harsha-hero-620\.webp/);
+  assert.doesNotMatch(html, /harsha-hero-900\.jpg/);
+  const sections = read('styles/sections.css');
+  assert.match(sections, /\.work-scatter__item--tr\s*\{[^}]*background:\s*transparent[^}]*box-shadow:\s*none/);
 });
