@@ -1196,14 +1196,26 @@
   z-index: 3;
 }
 
-/* Top Right: sized to the collage's own shape (900x626) so the whole artwork fits without cropping. */
+/* Top Right: a transparent collage (harsha-hero-620.webp), so it floats on the paper with no card
+   behind it. Sized to the artwork's own shape (620x431); the shadow follows the artwork's outline. */
 .work-scatter__item--tr {
   left: 71%;
   top: 0px;
   width: 210px;
   height: 146px;
-  border-radius: 20px;
-  background: #eee3d6;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+}
+
+.work-scatter__item--tr img {
+  object-fit: contain;
+  filter: drop-shadow(0 10px 16px rgba(14, 56, 50, 0.14));
+}
+
+.work-scatter__item--tr:hover {
+  box-shadow: none;
 }
 
 /* Far Right Middle */
@@ -1258,11 +1270,6 @@
   .work-scatter__item--bl {
     aspect-ratio: 1;
   }
-
-  /* Square grid cell: show the whole wide collage on parchment rather than cropping its sides. */
-  .work-scatter__item--tr img {
-    object-fit: contain;
-  }
 }
 
 @media (max-width: 480px) {
@@ -1277,13 +1284,9 @@
     aspect-ratio: 4 / 3;
   }
 
-  /* Full-width on phones: match the collage's shape so it fills the card exactly. */
+  /* Full-width on phones: match the collage's shape so it fills its space exactly. */
   .work-scatter__item--tr {
-    aspect-ratio: 900 / 626;
-  }
-
-  .work-scatter__item--tr img {
-    object-fit: cover;
+    aspect-ratio: 620 / 431;
   }
 }
 

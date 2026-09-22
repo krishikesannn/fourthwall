@@ -713,9 +713,9 @@ body {
 /* Hero Showcase Right */
 .harsha-hero__visual {
   position: relative;
-  /* Keep transparent collage pixels on the editorial parchment instead of a
-     browser-default black canvas when the image is decoded on mobile. */
-  background: var(--bg-primary, #E5D4C2);
+  /* No fill: a flat colour here shows as a box against the textured paper.
+     harsha-hero.png keeps real transparency, so the page shows through. */
+  background: transparent;
 }
 
 .harsha-hero__visual picture {
