@@ -1203,6 +1203,14 @@
   width: 155px;
   height: 155px;
   border-radius: 20px;
+  background: #eee3d6;
+}
+
+/* The collage is wide (roughly 3:2); show all of it centred on parchment instead of cropping it. */
+.work-scatter__item--tr img {
+  object-fit: contain;
+  object-position: center;
+  padding: 6px;
 }
 
 /* Far Right Middle */
